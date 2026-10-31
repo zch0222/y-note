@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Y Note — 高保真 UI 设计稿</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --accent: #635bff;
+      --accent-soft: #efefff;
+      --accent-faint: #f7f6ff;
+      --text: #24252a;
+      --text-soft: #565a64;
+      --muted: #858994;
+      --faint: #aaaeb8;
+      --workbench: #f4f5f7;
+      --sidebar: #f7f7f9;
+      --paper: #ffffff;
+      --panel: #fbfbfc;
+      --line: #e8e9ed;
+      --line-strong: #dfe1e7;
+      --hover: #ececf1;
+      --selection: #e9e8ff;
+      --green: #27836d;
+      --green-soft: #eaf6f1;
+      --amber: #ae7226;
+      --amber-soft: #fff5e6;
+      --red: #c34b55;
+      --red-soft: #fff0f1;
+      --code-bg: #23242b;
+      --code-text: #e6e6ee;
+      --shadow: 0 12px 32px rgba(29, 30, 43, .12), 0 2px 8px rgba(29, 30, 43, .06);
+    }
+
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --accent: #9a94ff;
+      --accent-soft: #302d51;
+      --accent-faint: #252333;
+      --text: #e8e8ec;
+      --text-soft: #b6b7c0;
+      --muted: #8e909b;
+      --faint: #686a75;
+      --workbench: #111216;
+      --sidebar: #1b1c21;
+      --paper: #18191d;
+      --panel: #1c1d22;
+      --line: #2b2c33;
+      --line-strong: #383943;
+      --hover: #282930;
+      --selection: #37334f;
+      --green: #71c7aa;
+      --green-soft: #1d342d;
+      --amber: #d9aa66;
+      --amber-soft: #362c20;
+      --red: #ed8d96;
+      --red-soft: #382429;
+      --code-bg: #101116;
+      --code-text: #e6e6ee;
+      --shadow: 0 12px 32px rgba(0, 0, 0, .4);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      color: var(--text);
+      background: var(--workbench);
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .icon { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+    .icon.small { width: 14px; height: 14px; }
+    .icon.large { width: 19px; height: 19px; }
+    .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .hidden { display: none !important; }
+
+    .window { height: 100%; display: grid; grid-template-rows: 46px minmax(0, 1fr) 27px; background: var(--paper); }
+    .titlebar {
+      display: grid;
+      grid-template-columns: 290px minmax(0, 1fr) 290px;
+      align-items: center;
+      background: var(--sidebar);
+      border-bottom: 1px solid var(--line);
+      user-select: none;
+    }
+    .title-left { display: flex; align-items: center; gap: 10px; padding-left: 17px; min-width: 0; }
+    .traffic-lights { position: absolute; left: 17px; top: 17px; display: none; gap: 8px; }
+    .traffic { width: 11px; height: 11px; border-radius: 50%; }
+    .traffic.close { background: #ff5f57; }
+    .traffic.min { background: #febc2e; }
+    .traffic.max { background: #28c840; }
+    .workspace-name { font-size: 12px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+    .title-separator { color: var(--faint); }
+    .title-file { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .title-center { display: flex; justify-content: center; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+    .save-state { display: inline-flex; align-items: center; gap: 6px; }
+    .save-state .dot { width: 5px; height: 5px; background: var(--green); border-radius: 50%; }
+    .title-divider { width: 1px; height: 12px; background: var(--line-strong); margin: 0 3px; }
+    .clean-link { border: 0; background: transparent; color: var(--green); padding: 4px 6px; border-radius: 5px; cursor: pointer; font-size: 11px; }
+    .clean-link:hover { background: var(--green-soft); }
+    .title-actions { display: flex; justify-content: flex-end; align-items: center; gap: 3px; padding-right: 12px; }
+    .window-controls { display: flex; margin-left: 8px; }
+    .window-control { width: 34px; height: 30px; border: 0; background: transparent; display: grid; place-items: center; color: var(--muted); border-radius: 5px; }
+    .window-control:hover { background: var(--hover); }
+
+    .icon-button { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); display: inline-grid; place-items: center; cursor: pointer; }
+    .icon-button:hover { background: var(--hover); color: var(--text); }
+    .icon-button.active { color: var(--accent); background: var(--accent-soft); }
+
+    .workspace { min-height: 0; display: grid; grid-template-columns: 54px 236px minmax(460px, 1fr) 284px; }
+    .activity-rail {
+      background: var(--sidebar);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 13px 0 10px;
+      gap: 7px;
+      z-index: 2;
+    }
+    .brand { width: 29px; height: 29px; border-radius: 9px; background: linear-gradient(145deg, #7771ff, #554de7); color: #fff; display: grid; place-items: center; font-size: 15px; font-weight: 750; box-shadow: 0 4px 12px rgba(99, 91, 255, .23); margin-bottom: 14px; position: relative; }
+    .brand::after { content: ""; position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #b9f5dd; right: 4px; top: 4px; border: 1.5px solid #665fe9; }
+    .rail-button { width: 36px; height: 36px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; position: relative; }
+    .rail-button:hover { background: var(--hover); color: var(--text); }
+    .rail-button.active { background: var(--accent-soft); color: var(--accent); }
+    .rail-button.active::before { content: ""; position: absolute; width: 3px; height: 17px; border-radius: 0 3px 3px 0; background: var(--accent); left: -9px; }
+    .rail-spacer { flex: 1; }
+    .avatar { width: 27px; height: 27px; border-radius: 50%; background: var(--hover); color: var(--text-soft); display: grid; place-items: center; font-size: 10px; font-weight: 650; margin-top: 5px; }
+
+    .file-sidebar { min-width: 0; background: var(--sidebar); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+    .sidebar-head { height: 51px; padding: 0 14px 0 17px; display: flex; align-items: center; justify-content: space-between; }
+    .sidebar-title { font-size: 12px; font-weight: 650; }
+    .sidebar-head-actions { display: flex; gap: 1px; }
+    .search-box { margin: 0 12px 15px; height: 31px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid var(--line); background: var(--paper); border-radius: 7px; color: var(--muted); }
+    .search-box input { border: 0; outline: 0; background: transparent; min-width: 0; width: 100%; color: var(--text); font-size: 11px; }
+    .search-box input::placeholder { color: var(--muted); }
+    .key { font-family: inherit; font-size: 9px; color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; white-space: nowrap; }
+    .tree-scroll { flex: 1; overflow: auto; padding: 0 8px 16px; }
+    .section-label { display: flex; align-items: center; gap: 5px; color: var(--muted); text-transform: uppercase; font-size: 9px; font-weight: 650; letter-spacing: .09em; padding: 6px 8px 8px; }
+    .tree-row { height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 8px; border-radius: 6px; color: var(--text-soft); cursor: default; position: relative; font-size: 11.5px; white-space: nowrap; }
+    .tree-row:hover { background: var(--hover); }
+    .tree-row.selected { background: var(--selection); color: var(--accent); font-weight: 550; }
+    .tree-row .icon { color: var(--muted); width: 14px; height: 14px; }
+    .tree-row.selected .icon { color: var(--accent); }
+    .tree-row.indent-1 { padding-left: 23px; }
+    .tree-row.indent-2 { padding-left: 41px; }
+    .tree-row .file-name { overflow: hidden; text-overflow: ellipsis; }
+    .tree-row .modified { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+    .tree-row .count { margin-left: auto; color: var(--faint); font-size: 10px; }
+    .tree-gap { height: 16px; }
+    .sidebar-footer { border-top: 1px solid var(--line); padding: 11px 13px; }
+    .workspace-card { display: flex; align-items: center; gap: 9px; padding: 5px 3px; }
+    .workspace-icon { width: 28px; height: 28px; border-radius: 7px; background: var(--hover); color: var(--muted); display: grid; place-items: center; }
+    .workspace-meta { min-width: 0; flex: 1; }
+    .workspace-meta strong { display: block; font-size: 11px; font-weight: 600; }
+    .workspace-meta span { display: block; font-size: 9px; color: var(--muted); margin-top: 3px; }
+
+    .editor-pane { min-width: 0; min-height: 0; background: var(--paper); display: grid; grid-template-rows: 51px 43px minmax(0, 1fr); position: relative; }
+    .document-head { display: flex; align-items: center; justify-content: space-between; padding: 0 20px 0 26px; border-bottom: 1px solid var(--line); }
+    .breadcrumb { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--muted); font-size: 10.5px; }
+    .breadcrumb span { white-space: nowrap; }
+    .breadcrumb .current { color: var(--text-soft); }
+    .document-actions { display: flex; align-items: center; gap: 4px; }
+    .history-label { color: var(--muted); font-size: 10px; margin-right: 5px; }
+    .format-toolbar { display: flex; align-items: center; gap: 3px; padding: 0 24px; border-bottom: 1px solid var(--line); background: var(--paper); }
+    .format-toolbar .tool { height: 27px; min-width: 27px; border-radius: 5px; border: 0; background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0 6px; font-size: 11px; }
+    .format-toolbar .tool:hover { background: var(--hover); color: var(--text); }
+    .format-toolbar .tool.active { background: var(--accent-soft); color: var(--accent); }
+    .format-toolbar .tool.text { gap: 4px; padding: 0 8px; }
+    .format-toolbar .bold { font-family: Georgia, serif; font-size: 15px; font-weight: 700; }
+    .format-toolbar .italic { font-family: Georgia, serif; font-size: 15px; font-style: italic; }
+    .toolbar-divider { width: 1px; height: 15px; background: var(--line); margin: 0 5px; }
+    .toolbar-spacer { flex: 1; }
+    .mode-switch { display: flex; background: var(--workbench); padding: 2px; border-radius: 6px; }
+    .mode-switch button { border: 0; background: transparent; color: var(--muted); font-size: 9.5px; height: 22px; padding: 0 8px; border-radius: 4px; cursor: pointer; }
+    .mode-switch button.active { color: var(--text); background: var(--paper); box-shadow: 0 1px 3px rgba(20, 20, 30, .08); }
+
+    .editor-scroll { overflow: auto; min-height: 0; position: relative; scroll-behavior: smooth; }
+    .document { width: min(100%, 780px); margin: 0 auto; padding: 43px 58px 110px; position: relative; }
+    .doc-eyebrow { display: flex; align-items: center; gap: 9px; color: var(--accent); font-size: 9px; font-weight: 700; letter-spacing: .16em; margin-bottom: 16px; }
+    .doc-eyebrow::before { content: ""; width: 18px; height: 2px; background: var(--accent); border-radius: 2px; }
+    h1 { font-size: clamp(28px, 2.6vw, 38px); line-height: 1.25; letter-spacing: -.035em; margin: 0 0 15px; font-weight: 720; }
+    .doc-subtitle { margin: 0 0 23px; color: var(--text-soft); font-size: 14px; line-height: 1.9; max-width: 610px; }
+    .doc-meta { display: flex; align-items: center; gap: 13px; color: var(--muted); font-size: 9.5px; padding-bottom: 30px; border-bottom: 1px solid var(--line); margin-bottom: 30px; }
+    .meta-avatars { display: flex; }
+    .mini-avatar { width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; background: #eeedff; color: #625bd4; border: 2px solid var(--paper); font-size: 8px; font-weight: 650; }
+    .mini-avatar + .mini-avatar { margin-left: -6px; background: #e6f3ed; color: #36735f; }
+    .meta-dot { width: 2px; height: 2px; border-radius: 50%; background: var(--faint); }
+    .doc-section { position: relative; }
+    .doc-section h2 { font-size: 20px; line-height: 1.45; letter-spacing: -.015em; margin: 0 0 13px; font-weight: 680; display: flex; align-items: baseline; gap: 10px; }
+    .section-number { font-size: 10px; font-weight: 650; color: var(--accent); letter-spacing: .04em; }
+    .doc-section p { font-size: 13px; line-height: 2; margin: 0 0 17px; color: #41434b; }
+    [data-theme="dark"] .doc-section p { color: var(--text-soft); }
+    strong { font-weight: 650; color: var(--text); }
+    code.inline { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: .9em; background: var(--accent-faint); color: var(--accent); border: 1px solid var(--accent-soft); padding: 2px 5px; border-radius: 4px; }
+    .principle-card { margin: 22px 0 29px; padding: 17px 18px; background: var(--accent-faint); border: 1px solid var(--accent-soft); border-radius: 9px; display: grid; grid-template-columns: 29px 1fr; gap: 11px; }
+    .principle-icon { width: 29px; height: 29px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+    .principle-card h3 { font-size: 11px; margin: 1px 0 6px; font-weight: 650; }
+    .principle-card p { font-size: 11px; line-height: 1.8; margin: 0; color: var(--text-soft); }
+    .principle-card code { font-family: "SFMono-Regular", Consolas, monospace; color: var(--accent); font-size: 10px; }
+    .block-active { position: relative; border-radius: 5px; }
+    .block-active::before { content: ""; position: absolute; inset: -6px -11px; border-left: 2px solid var(--accent); background: linear-gradient(90deg, var(--accent-faint), transparent 65%); border-radius: 4px; pointer-events: none; opacity: .65; z-index: 0; }
+    .block-active > * { position: relative; z-index: 1; }
+    .block-handle { position: absolute; left: -48px; top: 7px; display: flex; gap: 1px; opacity: .8; }
+    .block-handle button { border: 0; background: transparent; color: var(--faint); width: 19px; height: 22px; padding: 0; display: grid; place-items: center; cursor: pointer; border-radius: 4px; }
+    .block-handle button:hover { background: var(--hover); color: var(--text); }
+    .task-list { list-style: none; padding: 0; margin: 18px 0 27px; display: grid; gap: 10px; }
+    .task-list li { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--text-soft); }
+    .checkbox { width: 15px; height: 15px; border: 1.5px solid var(--line-strong); border-radius: 4px; display: grid; place-items: center; flex: 0 0 auto; }
+    .checkbox.checked { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .checkbox .icon { width: 10px; height: 10px; stroke-width: 2.3; }
+    .task-list li.done { color: var(--muted); }
+    .task-list li.done .task-text { text-decoration: line-through; text-decoration-color: var(--faint); }
+    .task-tag { font-size: 8px; color: var(--green); background: var(--green-soft); border-radius: 4px; padding: 2px 5px; margin-left: 2px; }
+    .code-block { border-radius: 10px; overflow: hidden; background: var(--code-bg); color: var(--code-text); margin: 21px 0 28px; box-shadow: 0 4px 16px rgba(20, 20, 30, .06); }
+    .code-head { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 13px; border-bottom: 1px solid rgba(255,255,255,.07); color: #9899a7; font-size: 9px; }
+    .code-file { display: flex; align-items: center; gap: 7px; }
+    .code-lang { text-transform: uppercase; letter-spacing: .08em; font-size: 8px; }
+    .code-content { padding: 15px 0 17px; font: 10.5px/1.85 "SFMono-Regular", Consolas, "Liberation Mono", monospace; counter-reset: line; overflow: hidden; }
+    .code-line { display: grid; grid-template-columns: 37px 1fr; padding-right: 18px; white-space: pre; }
+    .code-line::before { counter-increment: line; content: counter(line); color: #5c5d69; text-align: right; padding-right: 14px; user-select: none; }
+    .syntax-purple { color: #c6b9ff; }
+    .syntax-blue { color: #91c9f7; }
+    .syntax-green { color: #9ed9af; }
+    .syntax-muted { color: #777986; }
+    .doc-end { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--faint); font-size: 9px; margin-top: 45px; }
+    .doc-end::before, .doc-end::after { content: ""; width: 36px; height: 1px; background: var(--line); }
+
+    .source-view { display: none; height: 100%; overflow: auto; background: var(--paper); }
+    .source-view pre { margin: 0; padding: 38px 52px 90px; font: 12px/2 "SFMono-Regular", Consolas, monospace; color: var(--text-soft); white-space: pre-wrap; tab-size: 2; }
+    .editor-pane.source-mode .editor-scroll { display: none; }
+    .editor-pane.source-mode .source-view { display: block; }
+    .editor-pane.source-mode .format-toolbar .tool { opacity: .35; pointer-events: none; }
+    .editor-pane.source-mode .format-toolbar .mode-switch, .editor-pane.source-mode .format-toolbar .mode-switch button { opacity: 1; pointer-events: auto; }
+
+    .inspector { min-width: 0; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+    .inspector-tabs { height: 51px; display: flex; align-items: stretch; padding: 0 15px; gap: 18px; border-bottom: 1px solid var(--line); }
+    .inspector-tab { border: 0; background: transparent; color: var(--muted); font-size: 11px; padding: 0 2px; position: relative; cursor: pointer; }
+    .inspector-tab.active { color: var(--text); font-weight: 600; }
+    .inspector-tab.active::after { content: ""; position: absolute; height: 2px; background: var(--accent); bottom: -1px; left: 2px; right: 2px; border-radius: 2px 2px 0 0; }
+    .inspector-tab .tab-count { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; margin-left: 4px; border-radius: 8px; background: var(--amber-soft); color: var(--amber); font-size: 8px; }
+    .inspector-actions { margin-left: auto; display: flex; align-items: center; }
+    .inspector-scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px 15px 24px; }
+    .panel-section { margin-bottom: 23px; }
+    .panel-heading { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 11px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .09em; font-weight: 650; }
+    .panel-heading .plain { text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .outline-list { display: grid; gap: 2px; }
+    .outline-item { min-height: 30px; display: flex; align-items: center; gap: 7px; border-radius: 6px; padding: 6px 9px; color: var(--text-soft); font-size: 10.5px; line-height: 1.45; cursor: pointer; }
+    .outline-item:hover { background: var(--hover); }
+    .outline-item.active { background: var(--accent-soft); color: var(--accent); }
+    .outline-item.sub { padding-left: 23px; color: var(--muted); }
+    .outline-item .outline-number { color: var(--faint); font-size: 8px; width: 14px; }
+    .outline-item.active .outline-number { color: var(--accent); }
+    .current-block-card { padding: 13px; border: 1px solid var(--line); background: var(--paper); border-radius: 9px; }
+    .block-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .block-type { display: flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 600; }
+    .type-icon { width: 23px; height: 23px; display: grid; place-items: center; border-radius: 6px; background: var(--hover); color: var(--muted); }
+    .mapping-badge { display: inline-flex; align-items: center; gap: 4px; color: var(--green); font-size: 8px; background: var(--green-soft); border-radius: 4px; padding: 3px 5px; }
+    .mapping-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+    .mapping-item span { display: block; font-size: 8px; color: var(--muted); margin-bottom: 4px; }
+    .mapping-item strong { display: block; font-family: "SFMono-Regular", Consolas, monospace; font-size: 9.5px; font-weight: 500; }
+    .clean-card { border: 1px solid #dcebe5; background: linear-gradient(145deg, var(--green-soft), var(--paper)); border-radius: 10px; padding: 14px; }
+    [data-theme="dark"] .clean-card { border-color: #294a3e; }
+    .clean-card-title { display: flex; align-items: center; gap: 8px; color: var(--green); font-size: 11px; font-weight: 650; }
+    .clean-check { width: 23px; height: 23px; border-radius: 50%; background: var(--green); color: #fff; display: grid; place-items: center; }
+    .clean-check .icon { width: 13px; height: 13px; stroke-width: 2.2; }
+    .clean-card p { color: var(--text-soft); font-size: 9.5px; line-height: 1.75; margin: 10px 0 12px; }
+    .format-stats { display: flex; gap: 12px; border-top: 1px solid rgba(39, 131, 109, .13); padding-top: 11px; }
+    .format-stat strong { display: block; font-size: 14px; line-height: 1; color: var(--text); }
+    .format-stat span { display: block; font-size: 8px; color: var(--muted); margin-top: 5px; }
+    .clean-card button { width: 100%; margin-top: 13px; height: 29px; border: 1px solid rgba(39, 131, 109, .18); background: var(--paper); color: var(--green); border-radius: 6px; font-size: 9.5px; cursor: pointer; }
+    .clean-card button:hover { background: var(--green-soft); }
+    .local-note { display: flex; align-items: flex-start; gap: 7px; color: var(--muted); font-size: 9px; line-height: 1.6; padding: 0 3px; }
+    .local-note .icon { margin-top: 1px; width: 13px; height: 13px; }
+
+    .diff-panel { display: none; }
+    .inspector[data-panel="diff"] .outline-panel { display: none; }
+    .inspector[data-panel="diff"] .diff-panel { display: block; }
+    .diff-summary { border: 1px solid var(--line); background: var(--paper); border-radius: 9px; padding: 14px; margin-bottom: 18px; }
+    .diff-summary-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .diff-branch { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; }
+    .diff-count { font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; }
+    .diff-count .add { color: var(--green); }
+    .diff-count .remove { color: var(--red); margin-left: 5px; }
+    .diff-file { display: flex; align-items: center; gap: 7px; font-size: 9.5px; color: var(--text-soft); }
+    .diff-file .file-status { margin-left: auto; color: var(--amber); font-size: 8px; }
+    .diff-progress { display: flex; height: 3px; border-radius: 2px; overflow: hidden; margin-top: 12px; }
+    .diff-progress .add { background: var(--green); width: 66%; }
+    .diff-progress .remove { background: var(--red); width: 34%; }
+    .source-diff { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--paper); margin-bottom: 18px; }
+    .source-diff-head { height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-bottom: 1px solid var(--line); font-size: 8.5px; color: var(--muted); }
+    .diff-code { padding: 9px 0; font: 8.5px/1.9 "SFMono-Regular", Consolas, monospace; }
+    .diff-line { display: grid; grid-template-columns: 22px 17px 1fr; min-height: 18px; }
+    .diff-line .line-no { color: var(--faint); text-align: right; padding-right: 6px; user-select: none; }
+    .diff-line .sign { text-align: center; user-select: none; }
+    .diff-line .line-text { white-space: pre-wrap; word-break: break-word; padding-right: 8px; }
+    .diff-line.context { color: var(--muted); }
+    .diff-line.added { background: var(--green-soft); color: var(--green); }
+    .diff-line.removed { background: var(--red-soft); color: var(--red); }
+    .diff-gap { padding: 5px 10px 5px 38px; color: var(--faint); background: var(--panel); font-size: 8px; }
+    .verify-list { border: 1px solid var(--line); border-radius: 9px; background: var(--paper); padding: 6px 12px; margin-bottom: 18px; }
+    .verify-row { display: flex; align-items: center; gap: 8px; min-height: 34px; border-bottom: 1px solid var(--line); font-size: 9.5px; color: var(--text-soft); }
+    .verify-row:last-child { border-bottom: 0; }
+    .verify-row .icon { color: var(--green); width: 13px; height: 13px; }
+    .verify-row span:last-child { margin-left: auto; color: var(--muted); font-size: 8px; }
+    .diff-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .button { height: 31px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--paper); color: var(--text-soft); font-size: 9.5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .button:hover { background: var(--hover); }
+    .button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .button.primary:hover { filter: brightness(.96); }
+
+    .statusbar { display: grid; grid-template-columns: 290px minmax(0, 1fr) 284px; align-items: center; background: var(--sidebar); border-top: 1px solid var(--line); color: var(--muted); font-size: 9px; user-select: none; }
+    .status-left { display: flex; align-items: center; gap: 12px; padding-left: 17px; }
+    .status-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+    .status-item .icon { width: 11px; height: 11px; }
+    .status-center { display: flex; justify-content: center; gap: 13px; }
+    .status-right { display: flex; justify-content: flex-end; gap: 12px; padding-right: 15px; }
+    .local-status { color: var(--green); }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+    .toast { position: fixed; left: 50%; bottom: 45px; transform: translate(-50%, 12px); padding: 10px 14px; background: var(--text); color: var(--paper); border-radius: 8px; box-shadow: var(--shadow); font-size: 11px; opacity: 0; pointer-events: none; transition: .18s ease; z-index: 20; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    ::-webkit-scrollbar { width: 9px; height: 9px; }
+    ::-webkit-scrollbar-thumb { background: transparent; border: 3px solid transparent; background-clip: padding-box; border-radius: 8px; }
+    *:hover::-webkit-scrollbar-thumb { background: var(--line-strong); border: 3px solid transparent; background-clip: padding-box; }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    @media (max-width: 1180px) {
+      .workspace { grid-template-columns: 54px 218px minmax(430px, 1fr); }
+      .inspector { display: none; }
+      .statusbar { grid-template-columns: 272px 1fr; }
+      .status-right { display: none; }
+      .titlebar { grid-template-columns: 272px 1fr 240px; }
+    }
+    @media (max-width: 850px) {
+      .workspace { grid-template-columns: 54px minmax(400px, 1fr); }
+      .file-sidebar { display: none; }
+      .titlebar { grid-template-columns: 200px 1fr 170px; }
+      .title-left { padding-left: 17px; }
+      .title-file, .title-separator, .history-label { display: none; }
+      .status-left { padding-left: 17px; }
+      .status-center { justify-content: flex-end; padding-right: 12px; }
+      .document { padding-left: 45px; padding-right: 45px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <svg class="svg-defs" aria-hidden="true">
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></symbol>
+    <symbol id="i-files" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v13M8 6h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"/><path d="M10 11h6M10 15h6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 10c5 0 3-4 8-4"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63 1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9 1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-quote" viewBox="0 0 24 24"><path d="M3 21c3 0 7-1 7-8V5H3v8h4c0 4-1 5-4 5v3ZM14 21c3 0 7-1 7-8V5h-7v8h4c0 4-1 5-4 5v3Z"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 10h18M9 4v16M15 4v16"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></symbol>
+    <symbol id="i-side" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 3h7v7M10 14 21 3M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 8a7 7 0 0 1 11.6-2.6L20 8M4 16l2.3 2.6A7 7 0 0 0 18 16"/></symbol>
+    <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3Z"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-square" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  </svg>
+
+  <div class="window">
+    <header class="titlebar">
+      <div class="traffic-lights" aria-hidden="true"><span class="traffic close"></span><span class="traffic min"></span><span class="traffic max"></span></div>
+      <div class="title-left"><span class="workspace-name">y-note</span><span class="title-separator">/</span><span class="title-file">architecture.md</span></div>
+      <div class="title-center"><span class="save-state"><span class="dot"></span>已保存</span><span class="title-divider"></span><button class="clean-link" data-open-diff>Clean Diff · 0 格式改写</button></div>
+      <div class="title-actions">
+        <button class="icon-button" id="theme-toggle" title="切换明暗主题" aria-label="切换明暗主题"><svg class="icon"><use href="#i-moon"/></svg></button>
+        <button class="icon-button" id="panel-toggle" title="切换上下文面板" aria-label="切换上下文面板"><svg class="icon"><use href="#i-side"/></svg></button>
+        <div class="window-controls" aria-hidden="true"><button class="window-control" tabindex="-1"><svg class="icon small"><use href="#i-minus"/></svg></button><button class="window-control" tabindex="-1"><svg class="icon small"><use href="#i-square"/></svg></button><button class="window-control" tabindex="-1"><svg class="icon small"><use href="#i-x"/></svg></button></div>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <nav class="activity-rail" aria-label="活动栏">
+        <div class="brand" title="Y Note">Y</div>
+        <button class="rail-button active" title="文件" aria-label="文件"><svg class="icon large"><use href="#i-files"/></svg></button>
+        <button class="rail-button" id="search-focus" title="搜索" aria-label="搜索"><svg class="icon large"><use href="#i-search"/></svg></button>
+        <button class="rail-button" data-open-diff title="Git 改动" aria-label="Git 改动"><svg class="icon large"><use href="#i-git"/></svg></button>
+        <div class="rail-spacer"></div>
+        <button class="rail-button" title="帮助与快捷键" aria-label="帮助与快捷键"><svg class="icon large"><use href="#i-command"/></svg></button>
+        <button class="rail-button" title="设置" aria-label="设置"><svg class="icon large"><use href="#i-settings"/></svg></button>
+        <div class="avatar" title="本地工作区">YN</div>
+      </nav>
+
+      <aside class="file-sidebar" aria-label="文件栏">
+        <div class="sidebar-head"><span class="sidebar-title">资源管理器</span><div class="sidebar-head-actions"><button class="icon-button" title="新建文件" aria-label="新建文件"><svg class="icon small"><use href="#i-plus"/></svg></button><button class="icon-button" title="更多" aria-label="更多"><svg class="icon small"><use href="#i-more"/></svg></button></div></div>
+        <label class="search-box"><svg class="icon small"><use href="#i-search"/></svg><input id="file-search" type="search" placeholder="搜索文件" /><span class="key">⌘ P</span></label>
+        <div class="tree-scroll">
+          <div class="section-label"><svg class="icon small"><use href="#i-down"/></svg>工作区</div>
+          <div class="tree-row"><svg class="icon"><use href="#i-folder"/></svg><span class="file-name">y-note</span><span class="count">12</span></div>
+          <div class="tree-row indent-1"><svg class="icon"><use href="#i-file"/></svg><span class="file-name">README.md</span></div>
+          <div class="tree-row indent-1"><svg class="icon"><use href="#i-file"/></svg><span class="file-name">CONTRIBUTING.md</span></div>
+          <div class="tree-row indent-1"><svg class="icon"><use href="#i-down"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="file-name">docs</span></div>
+          <div class="tree-row indent-2 selected"><svg class="icon"><use href="#i-file"/></svg><span class="file-name">architecture.md</span><span class="modified" title="已修改"></span></div>
+          <div class="tree-row indent-2"><svg class="icon"><use href="#i-file"/></svg><span class="file-name">clean-diff.md</span></div>
+          <div class="tree-row indent-2"><svg class="icon"><use href="#i-file"/></svg><span class="file-name">performance.md</span></div>
+          <div class="tree-row indent-1"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="file-name">src</span></div>
+          <div class="tree-row indent-1"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="file-name">src-tauri</span></div>
+          <div class="tree-gap"></div>
+          <div class="section-label"><svg class="icon small"><use href="#i-down"/></svg>最近打开</div>
+          <div class="tree-row"><svg class="icon"><use href="#i-clock"/></svg><span class="file-name">产品原则.md</span></div>
+          <div class="tree-row"><svg class="icon"><use href="#i-clock"/></svg><span class="file-name">会议纪要 · 10.31.md</span></div>
+          <div class="tree-row"><svg class="icon"><use href="#i-clock"/></svg><span class="file-name">阅读清单.md</span></div>
+        </div>
+        <div class="sidebar-footer"><div class="workspace-card"><div class="workspace-icon"><svg class="icon"><use href="#i-folder"/></svg></div><div class="workspace-meta"><strong>本地工作区</strong><span>D:\code\y-note</span></div><svg class="icon small" style="color:var(--muted)"><use href="#i-more"/></svg></div></div>
+      </aside>
+
+      <main class="editor-pane" id="editor-pane">
+        <div class="document-head">
+          <div class="breadcrumb"><span>docs</span><svg class="icon small" style="width:11px"><use href="#i-chevron"/></svg><span class="current">architecture.md</span></div>
+          <div class="document-actions"><span class="history-label">最后保存 20:18</span><button class="icon-button" title="文档历史" aria-label="文档历史"><svg class="icon small"><use href="#i-clock"/></svg></button><button class="icon-button" title="更多操作" aria-label="更多操作"><svg class="icon small"><use href="#i-more"/></svg></button></div>
+        </div>
+        <div class="format-toolbar" aria-label="格式工具栏">
+          <button class="tool text" title="正文样式">正文<svg class="icon small" style="width:11px"><use href="#i-down"/></svg></button>
+          <div class="toolbar-divider"></div>
+          <button class="tool bold" title="粗体 Ctrl/Cmd+B">B</button><button class="tool italic" title="斜体 Ctrl/Cmd+I">I</button>
+          <button class="tool" title="链接" aria-label="链接"><svg class="icon small"><use href="#i-link"/></svg></button><button class="tool" title="行内代码" aria-label="行内代码"><svg class="icon small"><use href="#i-code"/></svg></button>
+          <div class="toolbar-divider"></div>
+          <button class="tool" title="列表" aria-label="列表"><svg class="icon small"><use href="#i-list"/></svg></button><button class="tool" title="引用" aria-label="引用"><svg class="icon small"><use href="#i-quote"/></svg></button><button class="tool" title="表格" aria-label="表格"><svg class="icon small"><use href="#i-table"/></svg></button><button class="tool" title="图片" aria-label="图片"><svg class="icon small"><use href="#i-image"/></svg></button>
+          <div class="toolbar-spacer"></div>
+          <div class="mode-switch" aria-label="编辑模式"><button class="active" data-mode="visual">所见即所得</button><button data-mode="source">源码</button></div>
+        </div>
+
+        <div class="editor-scroll" id="editor-scroll">
+          <article class="document">
+            <div class="doc-eyebrow">ENGINEERING NOTES</div>
+            <h1>让每一次修改，<br/>都只留下真实的差异。</h1>
+            <p class="doc-subtitle">Y Note 是一个本地优先的 Markdown 编辑器。它将优雅的所见即所得体验，与字节级可靠的 Git 友好保存结合在一起。</p>
+            <div class="doc-meta"><div class="meta-avatars"><span class="mini-avatar">YN</span><span class="mini-avatar">设</span></div><span>设计草案 v0.1</span><span class="meta-dot"></span><span>2026.10.31</span><span class="meta-dot"></span><span>6 分钟阅读</span></div>
+
+            <section class="doc-section">
+              <h2><span class="section-number">01</span>原始源码是唯一事实</h2>
+              <p>编辑器不应该在保存时“重新理解”整篇文档。<strong>Tiptap 负责编辑体验，SourceBuffer 负责文件真相。</strong> 未触碰的内容不需要经过 AST 序列化，也不会因为光标经过而被重新格式化。</p>
+              <div class="principle-card"><div class="principle-icon"><svg class="icon"><use href="#i-shield"/></svg></div><div><h3>无损，而不是尽量无损</h3><p>保存是源区间补丁，不是全文导出。<code>__强调__</code>、CRLF、BOM 和末尾空白均保持原样。</p></div></div>
+              <div class="block-active"><div class="block-handle"><button title="在下方插入" aria-label="在下方插入"><svg class="icon small"><use href="#i-plus"/></svg></button><button title="拖动块" aria-label="拖动块"><svg class="icon small"><use href="#i-grip"/></svg></button></div><p>当用户修改一个段落，我们只更新这个段落对应的 <code class="inline">SourceSpan</code>。其他块没有进入保存管线，因此也不会产生意外的 Git 差异。</p></div>
+              <ul class="task-list"><li class="done"><span class="checkbox checked"><svg class="icon"><use href="#i-check"/></svg></span><span class="task-text">原始编码、BOM 与换行风格保持</span><span class="task-tag">已验证</span></li><li class="done"><span class="checkbox checked"><svg class="icon"><use href="#i-check"/></svg></span><span class="task-text">未编辑块永不重新序列化</span></li><li><span class="checkbox"></span><span>复杂结构使用局部源码安全降级</span></li></ul>
+              <div class="code-block"><div class="code-head"><span class="code-file"><svg class="icon small"><use href="#i-code"/></svg>source/patch.ts</span><span class="code-lang">TypeScript</span></div><div class="code-content"><div class="code-line"><span><span class="syntax-purple">export function</span> <span class="syntax-blue">saveDocument</span>(document: Document) {</span></div><div class="code-line"><span>  <span class="syntax-purple">if</span> (document.isPristine) <span class="syntax-purple">return</span> NO_OP</span></div><div class="code-line"><span>  <span class="syntax-purple">const</span> patches = document.<span class="syntax-blue">dirtySpans</span></span></div><div class="code-line"><span>  <span class="syntax-purple">return</span> <span class="syntax-blue">applySourcePatches</span>(patches)</span></div><div class="code-line"><span>  <span class="syntax-muted">// 没有全文格式化，没有无关差异</span></span></div><div class="code-line"><span>}</span></div></div></div>
+              <div class="doc-end">LOCAL FIRST · CLEAN BY DESIGN</div>
+            </section>
+          </article>
+        </div>
+
+        <div class="source-view" aria-label="Markdown 源码"><pre><span style="color:var(--muted)">---
+title: Clean by design
+---</span>
+
+<span style="color:var(--accent)"># 让每一次修改，都只留下真实的差异。</span>
+
+Y Note 是一个本地优先的 Markdown 编辑器。它将优雅的所见即所得体验，
+与字节级可靠的 Git 友好保存结合在一起。
+
+<span style="color:var(--accent)">## 01 原始源码是唯一事实</span>
+
+编辑器不应该在保存时“重新理解”整篇文档。
+**Tiptap 负责编辑体验，SourceBuffer 负责文件真相。**
+
+> 保存是源区间补丁，不是全文导出。
+> __强调__、CRLF、BOM 和末尾空白均保持原样。
+
+当用户修改一个段落，我们只更新这个段落对应的 `SourceSpan`。
+其他块没有进入保存管线，因此也不会产生意外的 Git 差异。
+
+- [x] 原始编码、BOM 与换行风格保持
+- [x] 未编辑块永不重新序列化
+- [ ] 复杂结构使用局部源码安全降级</pre></div>
+      </main>
+
+      <aside class="inspector" id="inspector" data-panel="outline" aria-label="上下文面板">
+        <div class="inspector-tabs"><button class="inspector-tab active" data-panel-tab="outline">大纲</button><button class="inspector-tab" data-panel-tab="diff">改动<span class="tab-count">1</span></button><div class="inspector-actions"><button class="icon-button" title="更多" aria-label="更多"><svg class="icon small"><use href="#i-more"/></svg></button></div></div>
+        <div class="inspector-scroll">
+          <div class="outline-panel">
+            <section class="panel-section"><div class="panel-heading"><span>文档大纲</span><span class="plain">6 个标题</span></div><div class="outline-list"><div class="outline-item"><span class="outline-number">H1</span>让每一次修改…</div><div class="outline-item active"><span class="outline-number">H2</span>01 原始源码是唯一事实</div><div class="outline-item sub"><span class="outline-number">H3</span>SourceBuffer</div><div class="outline-item sub"><span class="outline-number">H3</span>SourceSpan 映射</div><div class="outline-item"><span class="outline-number">H2</span>02 最小编辑补丁</div><div class="outline-item"><span class="outline-number">H2</span>03 原子保存与恢复</div></div></section>
+            <section class="panel-section"><div class="panel-heading"><span>当前块</span><span class="plain">P · 128–246</span></div><div class="current-block-card"><div class="block-card-head"><div class="block-type"><span class="type-icon">¶</span>普通段落</div><span class="mapping-badge"><svg class="icon small" style="width:10px"><use href="#i-check"/></svg>精确映射</span></div><div class="mapping-grid"><div class="mapping-item"><span>源节点</span><strong>paragraph</strong></div><div class="mapping-item"><span>保存策略</span><strong>S1 · Text patch</strong></div><div class="mapping-item"><span>编码</span><strong>UTF-8</strong></div><div class="mapping-item"><span>换行</span><strong>LF</strong></div></div></div></section>
+            <section class="panel-section"><div class="clean-card"><div class="clean-card-title"><span class="clean-check"><svg class="icon"><use href="#i-check"/></svg></span>干净 Diff 已守护</div><p>只写入真实内容变化。未编辑块、原始定界符与文件外壳保持原样。</p><div class="format-stats"><div class="format-stat"><strong>2</strong><span>内容修改</span></div><div class="format-stat"><strong style="color:var(--green)">0</strong><span>格式改写</span></div><div class="format-stat"><strong>118</strong><span> untouched 块</span></div></div><button data-open-diff>查看本次源 Diff →</button></div></section>
+            <div class="local-note"><svg class="icon"><use href="#i-lock"/></svg><span>所有内容仅保存在此设备。草稿与索引不会写入当前仓库。</span></div>
+          </div>
+
+          <div class="diff-panel">
+            <div class="diff-summary"><div class="diff-summary-top"><div class="diff-branch"><svg class="icon small"><use href="#i-git"/></svg>main</div><div class="diff-count"><span class="add">+2</span><span class="remove">−1</span></div></div><div class="diff-file"><svg class="icon small"><use href="#i-file"/></svg><span>architecture.md</span><span class="file-status">已修改</span></div><div class="diff-progress"><span class="add"></span><span class="remove"></span></div></div>
+            <div class="panel-heading"><span>源文件差异</span><span class="plain">仅 1 个块</span></div>
+            <div class="source-diff"><div class="source-diff-head"><span>docs/architecture.md</span><span>UTF-8 · LF</span></div><div class="diff-code"><div class="diff-line context"><span class="line-no">42</span><span class="sign"></span><span class="line-text">编辑器不应该在保存时</span></div><div class="diff-line context"><span class="line-no">43</span><span class="sign"></span><span class="line-text">“重新理解”整篇文档。</span></div><div class="diff-line removed"><span class="line-no">44</span><span class="sign">−</span><span class="line-text">Tiptap 负责渲染。</span></div><div class="diff-line added"><span class="line-no">44</span><span class="sign">+</span><span class="line-text">**Tiptap 负责编辑体验，</span></div><div class="diff-line added"><span class="line-no">45</span><span class="sign">+</span><span class="line-text">SourceBuffer 负责文件真相。**</span></div><div class="diff-gap">··· 118 个未编辑块保持不变 ···</div><div class="diff-line context"><span class="line-no">48</span><span class="sign"></span><span class="line-text">未触碰的内容不会重新格式化。</span></div></div></div>
+            <div class="panel-heading"><span>保存前检查</span><span class="plain" style="color:var(--green)">全部通过</span></div>
+            <div class="verify-list"><div class="verify-row"><svg class="icon"><use href="#i-check"/></svg><span>未编辑块字节一致</span><span>118 / 118</span></div><div class="verify-row"><svg class="icon"><use href="#i-check"/></svg><span>编码与换行保持</span><span>UTF-8 · LF</span></div><div class="verify-row"><svg class="icon"><use href="#i-check"/></svg><span>表格与列表未重排</span><span>0 处</span></div><div class="verify-row"><svg class="icon"><use href="#i-check"/></svg><span>仓库辅助文件</span><span>0 个</span></div></div>
+            <div class="diff-actions"><button class="button" id="save-button"><svg class="icon small"><use href="#i-check"/></svg>保存文件</button><button class="button primary" id="external-diff"><svg class="icon small"><use href="#i-external"/></svg>完整 Diff</button></div>
+            <div class="local-note" style="margin-top:17px"><svg class="icon"><use href="#i-shield"/></svg><span>Diff 对比基线为 Git HEAD。Y Note 不会自动提交、推送或改写 Git 配置。</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="statusbar"><div class="status-left"><span class="status-item"><svg class="icon"><use href="#i-git"/></svg>main*</span><span class="status-item">Markdown</span></div><div class="status-center"><span>行 44，列 18</span><span>1,284 字</span><span>UTF-8</span><span>LF</span></div><div class="status-right"><span class="status-item local-status"><span class="status-dot"></span>仅本地</span><span>草稿已恢复保护</span><span>简体中文</span></div></footer>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const inspector = document.getElementById('inspector');
+    const editorPane = document.getElementById('editor-pane');
+    const toast = document.getElementById('toast');
+    let toastTimer;
+
+    function notify(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    function setPanel(panel) {
+      inspector.dataset.panel = panel;
+      document.querySelectorAll('[data-panel-tab]').forEach(button => {
+        button.classList.toggle('active', button.dataset.panelTab === panel);
+      });
+      if (window.innerWidth <= 1180) notify('宽于 1180 px 的窗口可显示上下文面板');
+    }
+
+    document.querySelectorAll('[data-panel-tab]').forEach(button => {
+      button.addEventListener('click', () => setPanel(button.dataset.panelTab));
+    });
+    document.querySelectorAll('[data-open-diff]').forEach(button => {
+      button.addEventListener('click', () => setPanel('diff'));
+    });
+
+    document.querySelectorAll('[data-mode]').forEach(button => {
+      button.addEventListener('click', () => {
+        const source = button.dataset.mode === 'source';
+        editorPane.classList.toggle('source-mode', source);
+        document.querySelectorAll('[data-mode]').forEach(item => item.classList.toggle('active', item === button));
+      });
+    });
+
+    document.getElementById('theme-toggle').addEventListener('click', event => {
+      const dark = document.documentElement.dataset.theme !== 'dark';
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      event.currentTarget.querySelector('use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+    });
+
+    document.getElementById('panel-toggle').addEventListener('click', () => {
+      inspector.classList.toggle('hidden');
+      document.querySelector('.workspace').style.gridTemplateColumns = inspector.classList.contains('hidden') ? '54px 236px minmax(460px, 1fr)' : '';
+    });
+
+    document.getElementById('search-focus').addEventListener('click', () => document.getElementById('file-search').focus());
+    document.getElementById('save-button').addEventListener('click', () => notify('UI 设计稿：保存管线将在实现阶段接入'));
+    document.getElementById('external-diff').addEventListener('click', () => notify('UI 设计稿：这里将打开完整只读 Diff'));
+
+    document.querySelectorAll('.outline-item').forEach(item => item.addEventListener('click', () => {
+      document.querySelectorAll('.outline-item').forEach(other => other.classList.remove('active'));
+      item.classList.add('active');
+    }));
+
+    document.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        notify('已保存 · 0 处格式改写（UI 演示）');
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+        document.getElementById('file-search').focus();
+      }
+      if (event.key === 'Escape') document.activeElement.blur();
+    });
+  </script>
+</body>
+</html>
