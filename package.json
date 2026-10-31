@@ -13,6 +13,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:native": "node scripts/native-acceptance.mjs",
+    "test:native:draft:prepare": "node scripts/native-draft-recovery.mjs prepare",
+    "test:native:draft:verify": "node scripts/native-draft-recovery.mjs verify",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test"
   },

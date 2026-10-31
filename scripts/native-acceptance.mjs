@@ -1,24 +1,68 @@
 // Windows/WebView2 acceptance. Start the app with:
 // WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 npm run tauri -- dev --no-watch
 // then run: npm run test:native
-import { chromium } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { chromium } from '@playwright/test'
+
 const DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'y-note-native-'))
 const FILE_A = path.join(DIR, 'lf.md')
 const FILE_B = path.join(DIR, 'bom-crlf.md')
 const FILE_C = path.join(DIR, 'deleted.md')
+const FILE_D = path.join(DIR, 'picker.md')
+const FILE_IME = path.join(DIR, 'ime.md')
+const SUBDIR = path.join(DIR, 'sub')
+const FILE_INNER = path.join(SUBDIR, 'inner.md')
 
 const A_TEXT = '# 原生验收\n\n第一段。\n\n- [ ] 任务\n'
 const B_TEXT = '\uFEFF# BOM 标题\r\n\r\n第一段。\r\n\r\n第二段。'
 const C_TEXT = '# 删除测试\n\n本地内容。\n'
+const D_TEXT = '# 文件选择框\n\n通过原生对话框打开。\n'
+const IME_TEXT = '# IME 验收\n\n原文。\n'
+const INNER_TEXT = '# 子目录\n'
 
 fs.writeFileSync(FILE_A, A_TEXT, 'utf8')
 fs.writeFileSync(FILE_B, B_TEXT, 'utf8')
 fs.writeFileSync(FILE_C, C_TEXT, 'utf8')
+fs.writeFileSync(FILE_D, D_TEXT, 'utf8')
+fs.writeFileSync(FILE_IME, IME_TEXT, 'utf8')
+fs.mkdirSync(SUBDIR)
+fs.writeFileSync(FILE_INNER, INNER_TEXT, 'utf8')
+
+function git(args, options = {}) {
+  return execFileSync('git', ['-C', DIR, ...args], {
+    encoding: 'utf8',
+    ...options,
+  }).trim()
+}
+
+function gitStatus() {
+  // Leading spaces are part of the porcelain status code.
+  return execFileSync('git', ['-C', DIR, 'status', '--porcelain'], {
+    encoding: 'utf8',
+  }).trimEnd()
+}
+
+function changedFiles() {
+  return gitStatus()
+    .split('\n')
+    .filter(Boolean)
+    .map(line => line.slice(3).trim())
+}
+
+function checkpoint(message) {
+  git(['add', '-A'])
+  git(['commit', '-q', '-m', message])
+}
+
+git(['init', '-q'])
+git(['config', 'user.name', 'Y Note Acceptance'])
+git(['config', 'user.email', 'acceptance@example.invalid'])
+checkpoint('initial')
 
 const checks = []
 
@@ -54,9 +98,42 @@ if (!page) {
   throw new Error('Y Note page not found in WebView2')
 }
 await page.waitForFunction(() => Boolean(window.__YNOTE_DEBUG__), null, { timeout: 15_000 })
-await page.evaluate(() => localStorage.clear())
-await page.reload({ waitUntil: 'domcontentloaded' })
-await page.waitForFunction(() => Boolean(window.__YNOTE_DEBUG__?.store), null, { timeout: 15_000 })
+try {
+  execFileSync(
+    'powershell',
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      path.resolve('scripts/close-open-dialogs.ps1'),
+    ],
+    { stdio: 'ignore', timeout: 15_000 },
+  )
+} catch {
+  // No app process or no stale dialog; either way the reset below is harmless.
+}
+await page.evaluate(async () => {
+  const store = window.__YNOTE_DEBUG__?.store
+  localStorage.clear()
+  if (!store) {
+    return
+  }
+  if (store.doc) {
+    await store.gateway.deleteDraft(store.doc.path).catch(() => undefined)
+  }
+  await store.stopWatching().catch(() => undefined)
+  store.doc = null
+  store.workspace = null
+  store.workspaceError = null
+  store.recent = []
+  store.toast = null
+  store.mode = 'visual'
+  store.emit()
+})
+await page.waitForFunction(() => !window.__YNOTE_DEBUG__?.store?.editor, null, {
+  timeout: 15_000,
+})
 
 async function openPath(file) {
   return page.evaluate(async target => {
@@ -124,8 +201,66 @@ async function saveWithShortcut() {
   await page.keyboard.press('Control+s')
 }
 
+async function undoCommand() {
+  await page.evaluate(() => {
+    const editor = window.__YNOTE_DEBUG__.store.editor
+    editor.chain().focus().run()
+    editor.commands.undo()
+  })
+}
+
+async function redoCommand() {
+  await page.evaluate(() => window.__YNOTE_DEBUG__.store.editor.commands.redo())
+}
+
+async function tableCount() {
+  return page.evaluate(
+    () =>
+      (window.__YNOTE_DEBUG__.store.editor.getJSON().content ?? []).filter(
+        node => node.type === 'table',
+      ).length,
+  )
+}
+
+async function draftOf(file) {
+  return page.evaluate(
+    async target => window.__YNOTE_DEBUG__.store.gateway.readDraft(target),
+    file,
+  )
+}
+
+async function openViaPicker(file) {
+  await page.evaluate(() => {
+    void window.__YNOTE_DEBUG__.store.openFile()
+  })
+  execFileSync(
+    'powershell',
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      path.resolve('scripts/select-open-file.ps1'),
+      '-Path',
+      file,
+    ],
+    { stdio: 'inherit', timeout: 45_000 },
+  )
+  await page.waitForFunction(
+    target => window.__YNOTE_DEBUG__?.store.doc?.path === target,
+    file,
+    { timeout: 15_000 },
+  )
+}
+
 let failed = false
 try {
+  // 0. Open through the real Windows file dialog.
+  await openViaPicker(FILE_D)
+  await waitEditorContains('文件选择框')
+  check('原生文件选择框打开真实文件', (await state()).source === D_TEXT)
+  check('文件选择框打开不改变 Git 工作区', gitStatus() === '')
+
   // 1. Open a real LF file through the native backend.
   const opened = await openPath(FILE_A)
   await waitEditorContains('原生验收')
@@ -133,6 +268,16 @@ try {
   check('打开真实 LF 文件', opened.path === FILE_A && opened.source === A_TEXT)
   check('LF 与 UTF-8 识别', opened.encoding === 'utf-8' && opened.eol === 'LF')
   check('打开时基线等于磁盘 SHA', opened.baseline === diskSha, diskSha.slice(0, 12))
+
+  await new Promise(resolve => setTimeout(resolve, 1500))
+  check('默认闲置不改变 Git 工作区', gitStatus() === '')
+  const recentPaths = await page.evaluate(() =>
+    window.__YNOTE_DEBUG__.store.recent.map(entry => entry.path),
+  )
+  check(
+    '最近文件包含对话框与 IPC 打开的文件',
+    recentPaths.includes(FILE_D) && recentPaths.includes(FILE_A),
+  )
 
   // 2. No-op save through the real Ctrl/Cmd+S path.
   await page.evaluate(() => window.__YNOTE_DEBUG__.setMode('source'))
@@ -143,6 +288,7 @@ try {
   await saveWithShortcut()
   await waitState({ dirty: false, saveState: 'saved' })
   check('无操作保存字节不变', sha(fs.readFileSync(FILE_A)) === diskSha)
+  check('无操作保存不改变 Git 工作区', gitStatus() === '')
 
   // 3. Edit and save through the real Tiptap bridge.
   await insertAtEnd(' 原生验收编辑')
@@ -158,8 +304,69 @@ try {
     '保存后基线/缓冲/磁盘 SHA 一致',
     savedA.baseline === savedA.current && savedA.disk === savedA.current,
   )
+  check(
+    '单点修改仅改动目标文件',
+    changedFiles().length === 1 && changedFiles()[0] === 'lf.md',
+    gitStatus(),
+  )
+  const diffA = git(['diff', '--unified=0', '--', 'lf.md'])
+  const hunks = diffA.split('\n').filter(line => line.startsWith('@@')).length
+  const removed = diffA
+    .split('\n')
+    .filter(line => line.startsWith('-') && !line.startsWith('---')).length
+  const added = diffA
+    .split('\n')
+    .filter(line => line.startsWith('+') && !line.startsWith('+++')).length
+  check('Git Diff 只有一个 hunk 和一行增删', hunks === 1 && removed === 1 && added === 1)
+  checkpoint('single edit')
+  check('检查点后 Git 工作区干净', gitStatus() === '')
 
-  // 4. Native watcher: external change while clean.
+  // 4. Draft stays outside the Git workspace.
+  await openPath(FILE_C)
+  await waitEditorContains('删除测试')
+  await undoCommand()
+  check('打开新文档后撤销不会回到旧文档', (await state()).source === C_TEXT)
+  const beforeDraft = fs.readFileSync(FILE_C, 'utf8')
+  await insertAtEnd(' 草稿未保存')
+  await new Promise(resolve => setTimeout(resolve, 1600))
+  const draft = await draftOf(FILE_C)
+  check('草稿写入应用数据目录', Boolean(draft?.source.includes('草稿未保存')))
+  check('闲置与草稿不改变 Git 工作区', gitStatus() === '')
+  check('草稿未写回文件', fs.readFileSync(FILE_C, 'utf8') === beforeDraft)
+  await undoCommand()
+  await waitState({ dirty: false })
+  await page.evaluate(() => window.__YNOTE_DEBUG__.store.discardDraft())
+  check('丢弃草稿后无残留', (await draftOf(FILE_C)) === null)
+  check('撤销草稿后 Git 工作区仍干净', gitStatus() === '')
+
+  // 5. Workspace tree and recent files.
+  const tree = await page.evaluate(
+    async root => window.__YNOTE_DEBUG__.store.gateway.readWorkspace(root),
+    DIR,
+  )
+  const treeNames = []
+  const walk = node => {
+    treeNames.push(node.name)
+    for (const child of node.children) walk(child)
+  }
+  walk(tree)
+  check(
+    '工作区树包含 Markdown 文件与子目录',
+    treeNames.includes('lf.md') && treeNames.includes('sub') && treeNames.includes('inner.md'),
+  )
+  await page.evaluate(value => {
+    const store = window.__YNOTE_DEBUG__.store
+    store.workspace = value
+    store.emit()
+  }, tree)
+  await page.locator('.file-sidebar .tree-row', { hasText: 'sub' }).click()
+  await page.locator('.file-sidebar .tree-row', { hasText: 'inner.md' }).click()
+  await waitFor(async () => (await state()).source === INNER_TEXT)
+  check('文件树可打开子目录文件', true)
+
+  // 6. Native watcher: external change while clean.
+  await openPath(FILE_A)
+  await waitEditorContains('原生验收')
   const external = '# 外部修改\n\nwatcher\n'
   fs.writeFileSync(FILE_A, external, 'utf8')
   await waitState({ external: 'external-change' })
@@ -228,7 +435,84 @@ try {
   check('编辑已写入 BOM/CRLF 文件', bAfter.includes('追加'))
   check('末尾未新增换行', !bAfter.endsWith('\n'))
 
-  // 8. Read-only file: write fails without damaging the original.
+  // 8. IME composition, undo/redo, and bridge rollback.
+  checkpoint('before ime')
+  check('IME 前检查点干净', gitStatus() === '')
+
+  const cdp = await context.newCDPSession(page)
+  await openPath(FILE_IME)
+  await waitEditorContains('IME 验收')
+  await page.evaluate(() => window.__YNOTE_DEBUG__.store.editor.chain().focus('end').run())
+  await cdp.send('Input.imeSetComposition', {
+    text: 'zhong',
+    selectionStart: 5,
+    selectionEnd: 5,
+  })
+  await cdp.send('Input.imeSetComposition', {
+    text: '中文',
+    selectionStart: 2,
+    selectionEnd: 2,
+  })
+  await cdp.send('Input.insertText', { text: '中文' })
+  await waitFor(async () => (await state()).source.includes('中文'))
+
+  const imeSource = (await state()).source
+  check('IME composition 不丢字', imeSource.split('中文').length === 2)
+  const imeSelection = await page.evaluate(() => {
+    const editor = window.__YNOTE_DEBUG__.store.editor
+    return {
+      empty: editor.state.selection.empty,
+      atEnd: editor.state.selection.$from.parent.textContent.endsWith('中文'),
+      issues: window.__YNOTE_DEBUG__.store.doc.buffer.mapIssues.length,
+    }
+  })
+  check('IME 提交后选区在末尾', imeSelection.empty && imeSelection.atEnd)
+  check('IME 后映射问题为 0', imeSelection.issues === 0)
+
+  await undoCommand()
+  await waitState({ dirty: false })
+  check('撤销恢复 IME 前原文', (await state()).source === IME_TEXT)
+  check('撤销后 Git 工作区干净', gitStatus() === '')
+  await redoCommand()
+  await waitState({ dirty: true })
+  check('重做恢复中文输入', (await state()).source.includes('中文'))
+
+  await saveWithShortcut()
+  await waitState({ dirty: false, saveState: 'saved' })
+  check(
+    'IME 保存只改动目标文件',
+    changedFiles().length === 1 && changedFiles()[0] === 'ime.md',
+    gitStatus(),
+  )
+  const imeDiff = git(['diff', '--unified=0', '--', 'ime.md'])
+  const imeHunks = imeDiff.split('\n').filter(line => line.startsWith('@@')).length
+  const imeRemoved = imeDiff
+    .split('\n')
+    .filter(line => line.startsWith('-') && !line.startsWith('---')).length
+  const imeAdded = imeDiff
+    .split('\n')
+    .filter(line => line.startsWith('+') && !line.startsWith('+++')).length
+  check('IME 的 Git Diff 只有一行增删', imeHunks === 1 && imeRemoved === 1 && imeAdded === 1)
+  checkpoint('ime')
+
+  const tablesBefore = await tableCount()
+  await page.evaluate(() => {
+    window.__YNOTE_DEBUG__.store.editor
+      .chain()
+      .focus('end')
+      .insertTable({ rows: 2, cols: 2, withHeaderRow: true })
+      .run()
+  })
+  await waitFor(async () =>
+    (await page.evaluate(() => window.__YNOTE_DEBUG__.store.toast?.message ?? '')).includes(
+      '表格',
+    ),
+  )
+  check('无法映射的结构变更被回滚', (await tableCount()) === tablesBefore)
+  check('回滚后源码不变', (await state()).source === imeSource)
+  check('回滚后文档仍未修改', (await state()).dirty === false)
+
+  // 9. Read-only file: write fails without damaging the original.
   fs.chmodSync(FILE_A, 0o444)
   const readOnlyBytes = fs.readFileSync(FILE_A)
   await openPath(FILE_A)
