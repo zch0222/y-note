@@ -1,7 +1,7 @@
 # Y Note 进度与里程碑
 
 最后更新：2026-11-01
-当前阶段：**M0、M1 已完成（Windows）；M2 在 Windows 上完成 Git 块级分类、Worker 分析、输入快路径、视觉虚拟化与 1 MB / 10,000 块性能预算；macOS/Linux 实机验证仍未开始**
+当前阶段：**M0、M1 已完成（Windows）；M2 Windows 范围已完成；M3 Windows 范围已完成（视觉状态、命令面板、无障碍、打印、安装包与安全检查）。三平台安装包、Windows 签名、自动更新和 macOS/Linux 实机验证仍未完成**
 技术方向：React 19 · Tiptap 3.30.3 · Tauri 2 · Windows / macOS / Linux
 
 本文只记录已经验证的进展，不以代码量或主观百分比代替完成状态。里程碑只有在对应验收条件全部通过后才能标记为完成。
@@ -18,7 +18,7 @@
 | UI 浏览器验证 | 已完成 | 1440×900 渲染；大纲/Diff、源码/WYSIWYG、暗色模式切换正常 |
 | Git 仓库初始化 | 已完成 | 本地仓库已初始化并提交；M1 实施前基线为 6 个提交（HEAD `8c23dea`）；已加入 `.gitignore` |
 | M0 无损内核实现 | 已完成 | `src/source/`：FileEnvelope、SourceMap、SourceBuffer、S0–S5 补丁、投影、保存协议、原子写入 |
-| M0 内核级测试 | 已完成 | 9 个测试文件共 204 个测试通过（M2 后）；`tsc --noEmit` 无错误 |
+| M0 内核级测试 | 已完成 | 12 个测试文件共 219 个测试通过（M3 后，含 UI/安全配置测试）；`tsc --noEmit` 无错误 |
 | M0 UI 级无操作验收 | 已完成 | 浏览器预览中打开演示文件 → 聚焦 → 源码/视觉切换 → 保存，SHA-256 前后一致且 `dirty=false` |
 | React + Vite + Tauri 应用脚手架 | 已完成 | React 19.2.9、Vite 8.3.5、Tauri 2.12.4；前端生产构建与原生 debug 二进制构建均通过 |
 | Tiptap 投影与编辑桥接 | 已完成 | `src/editor/`：sourceId schema、投影接入、增量 patch、选区提示回传；浏览器预览验证 |
@@ -27,13 +27,19 @@
 | 所见即所得编辑 | 部分完成 | 段落、标题、粗体/斜体/删除线/行内代码、列表、引用、代码块、任务勾选已接入；表格结构编辑与图片插入仍只在源码模式处理 |
 | 原生文件监听 | 已完成（Windows 实机） | Rust `notify` watcher 在真实窗口捕获外部写入与删除；保存前 SHA 校验仍为兜底；网络盘待验证 |
 | 冲突态处置 | 已完成（Windows 实机） | 重新载入与保留本地在真实窗口通过；冲突保存不覆盖磁盘，删除文件后可重建 |
-| 自动化 E2E | 已完成（浏览器 + 原生窗口） | 11 条 Playwright 浏览器 E2E + 83 项 Windows/WebView2 原生验收 + 12 项强制退出草稿恢复验收 |
+| 自动化 E2E | 已完成（浏览器 + 原生窗口 + 发布版） | 19 条 Playwright 浏览器 E2E + 106 项 Windows/WebView2 原生验收 + 12 项强制退出草稿恢复验收 + 22 项发布二进制验收 |
 | M2 只读 Git 状态与 Diff | 已完成（Windows） | Rust `read_git_diff` + 改动面板 Git/未保存双视图；modified/clean/staged/untracked/deleted/renamed/binary/truncated 均与 `git` CLI 对照通过；未保存编辑不进入 Git 差异 |
 | M2 块级变更说明与分类 | 已完成（Windows 原生） | `src/source/analysis.ts` + HEAD/工作区双版本读取；区分内容修改与格式改写，展示块类型、行号、摘要和未改动块数 |
 | M2 Worker 源索引与 Diff | 已完成（浏览器与 WebView2） | 打开时由 Worker 生成源索引；Git 与未保存差分在 Worker 计算；无 Worker 环境同步回退；`analysisMode` 可观测 |
 | M2 连续输入快路径 | 已完成（Windows 实测） | 单步纯文本事务直接写源补丁；180 + 60 次击键 0 全文 JSON 序列化、0 全文 Diff；保存与草稿仍走既有异步路径 |
 | M2 安全视觉虚拟化 | 已完成（Chromium/WebView2） | 顶层块与代码/表格/原始块使用 `content-visibility`；完整 PM 文档与 DOM 保留；E2E 验证离屏查找、选区、焦点与撤销 |
 | M2 1 MB / 10,000 块性能预算 | 已达标（Windows） | Edge 156：TTI 1038.5 ms，输入 P95 1.4 ms（末尾）/ 4.1 ms（开头）；WebView2 156：TTI 1025.1 ms，P95 2.0 / 5.0 ms；可复现脚本与 JSON 报告 |
+| M3 视觉状态与命令面板 | 已完成（Windows 原生 + 浏览器） | 明/暗/跟随系统主题、文件栏与上下文面板折叠、空态、冲突态、命令面板、设置、快捷键、应用内确认与链接对话框；高保真走查截图见 `design/y-note-m3-*.png` |
+| M3 键盘、焦点、减少动效与 200% 缩放 | 已完成（Windows 原生 + 浏览器） | WCAG AA 对比度 token 测试；跳过正文链接、焦点陷阱、可访问名称与语义地标；纯键盘打开/编辑/保存/切换/设置流程；720×450 与 480×320 等效视口和原生 WebView2 200% 视口验证 |
+| M3 原生标题栏与快捷键 | 已完成（Windows 实机；macOS/Linux 配置未实机） | Windows 无边框标题栏、原生拖拽、最小化/最大化/还原/关闭；macOS Overlay 配置；快捷键按 Ctrl/⌘ 渲染 |
+| M3 打印 / PDF | 已完成（Windows 原生与发布版） | 从 SourceBuffer 当前投影生成打印文档；打印样式隐藏应用外壳；关闭 `content-visibility`；不写回源文件；系统打印对话框的实际 PDF 保存未自动化 |
+| M3 Windows 安装包与发布检查 | 部分完成 | MSI 4.11 MiB、NSIS 3.07 MiB；发布二进制 22 项验收通过；未签名、未配置更新、未执行实际安装/升级 |
+| M3 安全检查 | 已完成（Windows） | 生产 CSP 响应头与内联脚本拦截、`freezePrototype`、capability 最小化、Rust 侧授权路径范围、Rust 文件对话框、外链协议白名单 |
 | 三平台原生验证 | 未开始 | 尚无 macOS、Linux 安装包或实机结果 |
 
 ## 2. 已完成阶段：产品与架构设计
@@ -63,7 +69,7 @@
 | M0 无损内核证明 | 证明局部编辑不会产生全文格式差异 | 已完成 | 干净 Diff 合同、自动化测试与 UI 级无操作验收全部通过 |
 | M1 可用本地编辑器 | 打开、编辑、保存真实 Markdown 文件 | 已完成（Windows）：全部退出条件与自动化验收通过；macOS/Linux 未验证 | 核心编辑闭环、恢复和冲突保护通过端到端验证 |
 | M2 Git 可观察性与性能 | 看清真实修改，满足长文档性能预算 | 进行中：Windows 范围已完成（只读 Diff、块级分类、Worker、虚拟化、性能预算）；macOS/Linux 未验证 | 只读 Diff、长文档与三平台压力测试通过 |
-| M3 视觉完善与发布 | 形成可分发的跨平台桌面产品 | 未开始 | UI、可访问性、安装包和发布检查全部通过 |
+| M3 视觉完善与发布 | 形成可分发的跨平台桌面产品 | 进行中：Windows 范围完成（视觉、无障碍、打印、安装包、安全检查）；签名、更新、macOS/Linux 与升级路径未完成 | UI、可访问性、安装包和发布检查全部通过 |
 
 目标日期待项目排期后补充，不在没有估算依据时承诺日期。
 
@@ -118,7 +124,7 @@ npm run test:native:draft:prepare                    # 强制退出草稿恢复�
 npm run test:native:draft:verify                     # 强制退出草稿恢复：验证阶段
 ```
 
-最近一次结果（2026-11-01，M2 Windows 范围完成后复测）：`npm run check` 通过，9 个测试文件共 204 个测试通过；`tsc --noEmit` 无错误；`npm run build` 生产构建通过（主包 829.90 kB，gzip 258.76 kB；Worker 包 64.00 kB；Vite 提示主包超过 500 kB 预算）。
+最近一次结果（2026-11-01，M3 Windows 范围完成后复测）：`npm run check` 通过，12 个测试文件共 219 个测试通过；`tsc --noEmit` 无错误；`npm run build` 生产构建通过（主包 865.93 kB，gzip 267.25 kB；CSS 47.39 kB；Worker 包 64.02 kB；Vite 提示主包超过 500 kB 预算）。
 
 ### 退出条件
 
@@ -170,7 +176,7 @@ npm run test:native:draft:verify                     # 强制退出草稿恢复�
 | 文件工作流 | `src/state/store.ts` | 打开、保存、最近文件、原生 watcher 外部修改检测、冲突保护与“重新载入/保留本地”、草稿恢复/丢弃、只读降级 |
 | Tauri 后端 | `src-tauri/src/` | 临时文件 + fsync + 原子 rename、权限保留、SHA 冲突检测、文件缺失分支、草稿读写删除（应用数据目录）、工作区树、`notify` 文档目录监听与事件 |
 | 自动化验证 | `tests/app-store.test.ts`、`e2e/editor.spec.ts`、`playwright.config.ts` | 7 条应用层集成测试；7 条 Playwright 浏览器 E2E |
-| 原生验收工具 | `scripts/native-acceptance.mjs`、`scripts/select-open-file.ps1`、`scripts/close-open-dialogs.ps1` | M1 时 55 项 Windows/WebView2 原生验收，M2 扩展到 83 项，含真实文件选择框、Git 工作区/单点 Diff、Git 状态/块级分类、文件树/最近文件、IME、撤销/重做与回滚 |
+| 原生验收工具 | `scripts/native-acceptance.mjs`、`scripts/select-open-file.ps1`、`scripts/close-open-dialogs.ps1` | M1 时 55 项、M2 83 项，M3 扩展到 106 项；新增路径范围、标题栏、命令面板/设置、打印、外链策略与 200% 缩放检查 |
 | 草稿恢复验收 | `scripts/native-draft-recovery.mjs` | prepare/verify 两阶段：编辑不保存 → 强制结束进程 → 重启 → 恢复草稿 → 保存，12 项通过 |
 
 ### 验证记录（浏览器预览）
@@ -278,8 +284,8 @@ npm run test:native:draft:verify                     # 强制退出草稿恢复�
 - 源码视图是纯文本 textarea，无语法高亮；无法映射的原始块通过源码模式编辑。
 - M1 的“源码改动”仅比较打开时基线；M2 已改为“Git 差异 / 未保存改动”双视图，未保存差异以最近保存文本为基线，并在 Worker 中计算。
 - 设置与快捷键按钮目前只显示提示；暂无自动保存、多标签页和命令面板。
-- 长文档性能已在 Windows 完成 M2 实测（见第 6 节）；生产构建主包 829.90 kB，仍超过 Vite 500 kB 提示阈值。
-- Tauri CSP 仍为 `null`，capability 仅包含默认核心权限与 dialog；发布前需完成安全收紧。
+- 长文档性能已在 Windows 完成 M2 实测（见第 6 节）；M3 生产构建主包 865.93 kB，仍超过 Vite 500 kB 提示阈值。
+- M3 已将 CSP 从 `null` 收紧为生产/开发两套策略，capability 仅保留窗口与事件权限；详见第 7 节。
 
 ## 6. M2：Git 可观察性与性能
 
@@ -342,7 +348,7 @@ npm run perf:bench -- --native
 - `npm run test:native`：83 项 Windows/WebView2 验收通过，新增 Git untracked/staged/deleted/renamed/binary/非 UTF-8/大差异截断、块级分类与 CLI 对照。
 - `npm run test:native:draft:prepare` / `verify`：强制退出草稿恢复 12 项通过，清理阶段不再因文件监听持有目录而报 EBUSY。
 - `cargo test`：16 项通过（新增 3 项：双版本字节、untracked/deleted 版本、rename 旧路径）。
-- `npm run build`：生产构建通过；主包 829.90 kB（gzip 258.76 kB），独立 Worker 包 64.00 kB。
+- `npm run build`：生产构建通过；主包 829.90 kB（gzip 258.76 kB），独立 Worker 包 64.00 kB（M2 时的构建结果；M3 后为 865.93 kB / 267.25 kB，见第 7 节）。
 
 ### 退出条件
 
@@ -383,25 +389,105 @@ npm run perf:bench -- --native
 - 实现打印/PDF 导出，导出不得回写源文件。
 - 构建三平台安装包，完成签名、更新和发布检查。
 
+### 实现状态（Windows，2026-11-01）
+
+| 模块 | 文件 | 已实现能力 |
+|---|---|---|
+| 主题与面板状态 | `src/state/store.ts`、`src/App.tsx`、`src/ui/TitleBar.tsx`、`src/ui/Sidebar.tsx` | 浅色/深色/跟随系统；偏好持久化并响应系统主题变化；文件栏与上下文面板独立折叠并记忆状态；减少动态效果偏好；平台标识写入根节点 |
+| 命令面板与对话框 | `src/ui/CommandPalette.tsx`、`SettingsDialog.tsx`、`ShortcutsDialog.tsx`、`Modal.tsx`、`ConfirmDialog.tsx`、`LinkDialog.tsx` | 命令搜索、方向键/回车/Esc、`aria-activedescendant`、焦点陷阱与焦点恢复；设置、快捷键、应用内确认和链接编辑；不再使用 Tauri 中被改写为异步 Promise 的 `window.confirm/prompt` |
+| 视觉状态 | `src/styles/design.css`、`src/styles/app.css`、`src/ui/Welcome.tsx`、`EditorNotices.tsx` | 空态、草稿、只读、外部修改与冲突态；冲突操作改为“比较差异 / 使用磁盘版本 / 保留我的草稿”；高对比度 token；焦点边缘指示；标题栏、状态栏与工具栏响应式布局 |
+| 原生窗口 | `src/ui/WindowControls.tsx`、`src-tauri/tauri.windows.conf.json`、`tauri.macos.conf.json` | Windows 无边框标题栏与原生拖拽区域、最小化/最大化/还原/关闭；macOS 使用 Overlay + hiddenTitle 的配置；Linux 保留系统装饰 |
+| 打印 / PDF | `src/editor/print.ts`、`src/ui/PrintPreview.tsx`、`src/state/store.ts` | 从 SourceBuffer 当前投影生成打印 HTML（不是可能滞后的 `doc.tiptap`）；打印样式隐藏应用壳、展开离屏块、保留表格/代码/任务态；调用系统打印对话框，导出不写回源文件 |
+| 安全收紧 | `src-tauri/src/scope.rs`、`dialogs.rs`、`external.rs`、`tauri.conf.json`、`capabilities/default.json` | Rust 侧文件/文件夹选择并持久化授权范围；所有文档、工作区、watcher 与 Git 命令校验路径；生产 CSP 与开发 CSP 分离；`freezePrototype`；capability 仅保留窗口与事件权限，不开放 dialog IPC；外链仅 http/https/mailto 并经系统打开 |
+| 发布工具 | `scripts/release-check.mjs`、`release-acceptance.mjs`、`ui-walkthrough.mjs` | 发布门禁、真实发布二进制验收、可复现设计走查截图；Windows MSI/NSIS 安装包 |
+
+### 设计走查（Windows，2026-11-01）
+
+高保真截图已写入 `design/`：
+
+- [欢迎/空态](design/y-note-m3-welcome.png)
+- [浅色编辑态](design/y-note-m3-light.png)
+- [深色编辑态](design/y-note-m3-dark.png)
+- [命令面板](design/y-note-m3-palette.png)
+- [设置](design/y-note-m3-settings.png)
+- [冲突态](design/y-note-m3-conflict.png)
+- [应用内确认](design/y-note-m3-confirm.png)
+- [200% 缩放等效视口](design/y-note-m3-zoom200.png)
+
+走查覆盖：纸张/工作台层级、活动栏/文件栏/编辑区/上下文面板、明暗主题、面板折叠、命令面板、设置、冲突与确认、200% 缩放。与 M0 稿相比，文字对比度提高以满足 AA；Windows 标题栏使用应用内窗口控制，macOS 配置保留 Red/Yellow/Green 安全区，Linux 使用系统装饰。
+
+### 验证记录（Windows，2026-11-01）
+
+- `npm run check`：12 个测试文件、219 个测试通过，`tsc --noEmit` 无错误。新增设计 token 对比度、外链策略、发布配置与路径 scope 静态检查。
+- `npm run test:e2e`：19 条 Playwright 浏览器测试通过。新增命令面板纯键盘操作、系统/显式主题与减少动效、打印最新缓冲区且不回写、外链策略、链接对话框非法协议、纯键盘打开/编辑/保存/设置、200% 等效视口、语义地标/可访问名称/跳过链接/焦点指示、冲突操作。
+- `npm run test:native`：106 项 Windows/WebView2 验收通过。新增 Rust 路径范围拒绝、原生标题栏拖拽区域、最大化/还原真实窗口、命令面板与设置、应用内确认、打印内容与不写回、capability 未授权命令拒绝、Rust 外链协议拒绝、200% 缩放视口下编辑器宽度/面板收起/命令面板边界/保存。
+- `npm run test:native:draft:prepare` / `verify`：强制退出草稿恢复 12 项通过；脚本在重启后重新授权测试根目录。
+- `cargo test`：23 项通过（新增路径 scope 5 项、外链策略 2 项）。
+- `npm run test:release`：发布二进制 22 项通过。生产 CSP 响应头存在且内联脚本被拒绝；自定义标题栏与最大化/还原；原生对话框打开、无操作保存、编辑/原子保存、打印不写回、命令面板、深色设置、保存冲突与“保留我的草稿”应用内确认、未授权路径拒绝、调试授权入口在发布版拒绝、外链协议拒绝、capability 拒绝。
+- `npm run release:check:windows`：12/16 通过；未配置更新器、发布 exe 与 MSI/NSIS 均未签名，作为 Windows-scope 非阻塞项记录。
+- `npm run release:check`（完整发布门禁）：12/18 通过，6 个阻塞项为更新器、3 个未签名产物、macOS 与 Linux 安装包缺失；退出码 1。
+- `npm run build`：主包 865.93 kB（gzip 267.25 kB）、CSS 47.39 kB、Worker 64.02 kB；Vite 仍提示主包超过 500 kB。
+- 安装包：`src-tauri/target/release/bundle/msi/Y Note_0.1.0_x64_en-US.msi`（4.11 MiB）、`nsis/Y Note_0.1.0_x64-setup.exe`（3.07 MiB）。验证方式为运行 release 二进制并完成发布验收；未在本机执行安装/卸载/升级。
+
+可复现命令：
+
+```bash
+npm run check
+npm run test:e2e
+# 另开终端启动 dev 窗口：
+WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 npm run tauri -- dev --no-watch
+npm run test:native
+npm run test:native:draft:prepare   # 结束后按 PID 结束应用并重启
+npm run test:native:draft:verify
+npx tauri build
+npm run test:release                # 自行启动 release 二进制（端口 9224）
+npm run release:check:windows
+npm run release:check
+# 设计走查（先以 9223 启动 release 二进制）：
+node scripts/ui-walkthrough.mjs
+```
+
 ### 退出条件
 
-- [ ] UI 关键状态与高保真稿一致，并通过设计走查。
-- [ ] 正文与辅助文字满足 WCAG AA，核心流程可纯键盘完成。
+- [x] UI 关键状态与高保真稿一致，并通过设计走查。
+  - Windows 实机截图覆盖欢迎、明/暗编辑、命令面板、设置、冲突、确认和 200% 视口；走查脚本 `scripts/ui-walkthrough.mjs` 可复现。
+- [x] 正文与辅助文字满足 WCAG AA，核心流程可纯键盘完成。
+  - 明暗两套 token 的正文/辅助文字均 ≥4.5:1，控件边界 ≥3:1，并有单元测试守护；焦点可见、焦点陷阱与恢复、语义地标、可访问名称、跳过链接、减少动效和纯键盘打开/编辑/保存/切换/设置均已自动验证。未在 NVDA/VoiceOver 中做真人朗读验收。
 - [ ] 三平台安装、启动、打开、编辑、保存和升级路径通过。
-- [ ] Tauri capability、CSP、路径 scope 和外链策略完成安全检查。
+  - Windows MSI/NSIS 已构建，发布二进制通过 22 项验收；但未执行实际安装/卸载/升级，macOS/Linux 安装包与升级通道不存在。
+- [x] Tauri capability、CSP、路径 scope 和外链策略完成安全检查。
+  - 生产 CSP 响应头在 release 中验证，内联脚本被拒绝；capability 不含 `core:default` 与任何 dialog IPC；文件访问仅通过 Rust 授权路径；外链仅 http/https/mailto。
 - [ ] 所有干净 Diff 合同在三平台通过。
-- [ ] 发布说明明确已知限制，无未披露的数据安全问题。
+  - Windows 的原生验收、浏览器 E2E、草稿恢复和发布验收全部通过；macOS/Linux 尚未运行。
+- [x] 发布说明明确已知限制，无未披露的数据安全问题。
+  - 本节列出签名、更新、安装/升级、macOS/Linux、真实打印对话框、读屏和相对链接等未完成/限制项。
+
+### 已知限制
+
+- Windows 安装包和 release 可执行文件均未签名（Authenticode `NotSigned`），用户会看到 SmartScreen 提示；没有证书与时间戳服务。
+- 未配置 Tauri updater：没有更新端点、公钥/私钥和升级包，Windows 升级路径未验证。
+- 自动化只运行了 release 目录中的二进制，没有在本机执行 MSI/NSIS 安装、卸载和覆盖升级；需要在干净虚拟机/CI 中补做。
+- macOS/Linux 未构建安装包、未运行原生验收；macOS Overlay 标题栏配置与 Linux 系统装饰仅完成代码与配置，未实机验证。
+- 打印通过系统打印对话框输出；“另存为 PDF”依赖系统对话框。自动化用 `window.print` 桩验证打印文档内容与不写回，未自动保存真实 PDF 文件。
+- 读屏验收以语义地标、可访问名称、焦点管理和键盘流程的自动检查为准，未进行 NVDA/VoiceOver 真人朗读。
+- 安全 token 对比度以明/暗两套 CSS token 的静态计算为准；系统强制高对比度模式未专项验收。
+- CSP 保留 `style-src 'unsafe-inline'`（React/Tiptap 内联样式需要），生产脚本没有任何 `unsafe-inline`/`unsafe-eval`；远程资源全部禁止。
+- 路径范围持久化在应用数据目录，最多记住 100 个文件与 16 个文件夹；清空应用数据后，最近文件需通过系统对话框重新授权。`authorize_test_root` 仅 debug 构建可用，release 返回 `not-authorized`。
+- 相对路径 Markdown 链接可以被写入，但点击时不会在应用内跳转，并提示只允许 http/https/mailto；本地文件链接不打开。
+- 200% 缩放通过 WebView2 CDP 的设备指标模拟验证；未在所有真实系统缩放组合和浏览器缩放手势下人工验收。
+- 主包 865.93 kB（gzip 267.25 kB）仍超过 Vite 500 kB 提示阈值；当前未拆分编辑器与面板代码。
+- 表格结构编辑、图片插入、真实系统输入法候选窗、网络盘/特殊文件系统和三平台 watcher 仍是既有未完成项。
 
 ## 8. 下一步行动
 
-M0、M1 已完成（Windows）；M2 的 Windows 范围已完成并通过性能预算。“三平台均有结果”仍是 M2 唯一未勾选的退出条件：
+M0、M1、M2、M3 的 Windows 范围已完成；M2 与 M3 都仍有 macOS/Linux 实机条件未勾选，M3 还缺签名、更新和实际安装/升级：
 
-1. 在 macOS/Linux 重跑 83 项原生验收、文件监听、长文档与 `npm run perf:bench -- --native`；当前只有 Windows 数据。
-2. 补齐重命名且内容修改的行级 Diff，以及非 UTF-8 文件按源编码解码的行级显示。
-3. 用真实系统输入法（如微软拼音）人工验收候选窗、组词与选区；现有 IME 验收使用 Chromium composition 协议。
-4. 验证网络盘、特殊文件系统与超大仓库的 watcher/Git 刷新行为。
-5. 按需补齐表格结构编辑与图片插入；当前仅单元格文字与源码模式可用。
-6. M2 三平台条件通过后进入 M3：设置、无障碍、CSP 收紧、三平台安装包与发布检查。
+1. 在 macOS/Linux 构建并运行 release 验收、106 项原生验收、草稿恢复与长文档基准；当前只有 Windows 数据。
+2. 获取 Windows 代码签名证书与时间戳服务，签名 exe/MSI/NSIS；配置 Tauri updater 端点与签名密钥，完成升级测试。
+3. 在干净 Windows/macOS/Linux 机器上执行真实安装、卸载、覆盖升级和文件关联检查。
+4. 补做实际打印对话框/PDF 输出、NVDA/VoiceOver 朗读、系统高对比度和真实 200% 显示缩放验收。
+5. 继续 M2 未完成项：重命名且内容修改的行级 Diff、非 UTF-8 行级显示、真实系统输入法候选窗、网络盘/特殊文件系统 watcher。
+6. 按需补齐表格结构编辑与图片插入；表格目前仅单元格文字与源码模式可用。
 
 ## 9. 当前主要风险
 
@@ -414,7 +500,7 @@ M0、M1 已完成（Windows）；M2 的 Windows 范围已完成并通过性能�
 | Windows 与 Unix 原子替换语义不同 | Node 与 Rust 实现均有单元测试；发布前仍需三平台故障注入并确认权限保留 |
 | 投影 JSON 与真实 Tiptap schema/扩展不一致 | 已接入真实 schema 与桥接回滚；继续补事务级 golden tests，不允许直接信任投影文本 |
 | 长文档虚拟化破坏编辑器语义 | 使用 `content-visibility: auto` 只跳过离屏布局/绘制，不删除任何 PM 节点或 DOM；E2E 验证离屏查找、选区、焦点与撤销 |
-| 浏览器预览与 Tauri 原生行为差异 | Windows 原生核心流程、83 项验收与 1 MB 基准已通过；继续覆盖真实系统输入法与 macOS/Linux |
+| 浏览器预览与 Tauri 原生行为差异 | Windows 原生核心流程、106 项验收、发布版 22 项验收与 1 MB 基准已通过；继续覆盖真实系统输入法与 macOS/Linux |
 | 原生 watcher 在原子替换、网络盘或特殊文件系统上的事件差异 | Windows 实机已验证原子替换、删除与外部编辑；继续验证网络盘、特殊文件系统与三平台 |
 | UI 与 SourceBuffer 世代不同步导致编辑器保留旧内容 | 已改为全局单调 epoch 并加入应用层与浏览器 E2E 回归断言；继续关注重新载入/切换路径 |
 | 撤销历史跨文档污染或重投影清空重做栈 | 每次文档加载使用独立 loadId 重建编辑器；内容已一致时跳过 setContent；已加入跨文档与撤销/重做回归测试 |
@@ -426,8 +512,27 @@ M0、M1 已完成（Windows）；M2 的 Windows 范围已完成并通过性能�
 | Git rename 检测与 pathspec 冲突 | 状态扫描整个仓库以保留 rename 检测；重命名文件不渲染可能误导的行级 hunk，块级摘要读取 HEAD 旧路径并提示 `git diff -M` |
 | Worker 不可用导致大文档阻塞主线程 | 自动回退同步分析；正常浏览器/WebView2 环境已通过 `analysisMode` 与基准确认使用 Worker |
 | 性能预算测量口径被误读 | `PROGRESS.md` 与 JSON 报告同时记录测量边界：TTI 含打开与两帧，P95 仅编辑桥接处理时间，墙钟时间单独记录 |
+| 发布产物未签名或无更新通道 | `release-check` 将签名、更新器和三平台产物列为阻塞项；Windows-scope 运行使用 `--allow-unsigned` 仅作本地验证，不视为可发布 |
+| 路径授权范围过宽或失效 | Rust `PathScope` 只接受对话框/工作区授权，规范化路径并限制 100 文件/16 文件夹；删除文件按父目录匹配；发布版拒绝调试授权入口 |
+| 无边框标题栏在不同窗口管理器/Snap 下行为不同 | Windows 实机验收最大化/还原与拖拽；macOS/Linux 保留系统装饰或 Overlay 配置，发布前需实机验证最小尺寸、贴边和快捷键 |
+| 打印依赖系统对话框，导出结果无法完全自动比对 | 从 SourceBuffer 当前投影生成打印 DOM，自动验证内容与不写回；PDF 文件、分页和字体嵌入仍需人工打印验收 |
+| 读屏与 200% 缩放的自动检查不等于真人体验 | 已用语义/名称/焦点/视口测试守护；发布前补 NVDA/VoiceOver 与真实系统缩放人工验收 |
+| 应用内确认替换原生 `window.confirm` | Tauri 将 `confirm` 改写为返回 Promise，原布尔判断会直接通过；现统一走 `askConfirm` 组件，测试覆盖取消/确认路径 |
 
 ## 10. 更新记录
+
+### 2026-11-01（M3 Windows 范围完成）
+
+- 新增命令面板、设置、快捷键、应用内确认与链接编辑对话框；支持浅色/深色/跟随系统、减少动态效果、文件栏/上下文面板折叠和跳过正文链接。
+- 重做视觉 token 与响应式布局：正文/辅助文字达到 WCAG AA，控件边界 ≥3:1；修复窄窗口隐藏侧栏时网格自动放置把编辑器压到 0 宽的问题；200% 等效视口可用。
+- Windows 改为无边框标题栏 + 原生拖拽/最小化/最大化/还原/关闭；macOS 增加 Overlay 配置；快捷键按 Ctrl/⌘ 渲染。
+- 打印/PDF 视图改为从 SourceBuffer 当前投影生成，修复连续输入后 `doc.tiptap` 滞后导致打印旧内容的问题；打印不写回源文件。
+- 安全收紧：Rust 侧文件/文件夹选择并持久化路径范围，所有文件/工作区/watcher/Git 命令校验；生产 CSP、devCsp、`freezePrototype`；capability 仅保留窗口与事件；外链仅 http/https/mailto；移除前端 dialog IPC 权限并替换 `window.confirm/prompt`。
+- 新增发布工具：`release-check.mjs`、`release-acceptance.mjs`、`ui-walkthrough.mjs`；生成 MSI（4.11 MiB）与 NSIS（3.07 MiB）安装包。
+- 验证：`npm run check` 219 项、E2E 19 条、原生验收 106 项、草稿恢复 12 项、`cargo test` 23 项、发布二进制验收 22 项全部通过；Windows 发布门禁 12/16（未签名/未配置更新），完整门禁 12/18（另缺 macOS/Linux 产物）。
+- 设计走查截图写入 `design/y-note-m3-*.png`；M3 的 Windows UI、无障碍、打印、安全检查与发布说明完成，三平台安装/升级、签名与更新仍未勾选。
+
+### 2026-11-01（M2 Windows 范围完成）
 
 ### 2026-11-01（M2 Windows 范围完成）
 
