@@ -1,6 +1,6 @@
 {
   "name": "y-note",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Local-first lossless Markdown editor",
@@ -15,13 +15,15 @@
     "test:native": "node scripts/native-acceptance.mjs",
     "test:native:draft:prepare": "node scripts/native-draft-recovery.mjs prepare",
     "test:native:draft:verify": "node scripts/native-draft-recovery.mjs verify",
+    "test:release": "node scripts/release-acceptance.mjs",
     "perf:bench": "node scripts/perf-bench.mjs",
+    "release:check": "node scripts/release-check.mjs",
+    "release:check:windows": "node scripts/release-check.mjs --windows-only --allow-unsigned",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
-    "@tauri-apps/plugin-dialog": "^2.8.4",
     "@tiptap/core": "^3.30.3",
     "@tiptap/extension-image": "^3.30.3",
     "@tiptap/extension-list": "^3.30.3",
