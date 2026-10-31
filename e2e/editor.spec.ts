@@ -117,6 +117,7 @@ test('offers a reload for a clean external change without writing the disk', asy
 
   await page.locator('.notice-warn').getByRole('button', { name: '重新载入' }).click()
   await expect.poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.source())).toBe('# 外部修改\n')
+  await expect(page.locator('.ProseMirror')).toContainText('外部修改')
   expect(await diskSource(page)).toBe('# 外部修改\n')
   expect(await page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.external)).toBe('none')
 })

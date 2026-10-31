@@ -246,7 +246,7 @@ export class AppStore {
       encoding: envelope.encoding,
       eol: envelope.eol,
       lastSavedAt: Date.now(),
-      epoch: ++this.epochCounter,
+      epoch: this.nextEpoch(),
       external: 'none',
       draft: hasDraft ? draft : null,
       chars: buffer.current.length,
@@ -312,7 +312,7 @@ export class AppStore {
       const projected = toTiptapDocument(projectDocument(this.doc.buffer.map))
       this.doc.tiptap = projected
       this.doc.outline = collectOutline(projected)
-      this.doc.epoch += 1
+      this.doc.epoch = this.nextEpoch()
       this.doc.hint = undefined
     }
     this.mode = mode
@@ -364,6 +364,11 @@ export class AppStore {
     }, 2800)
   }
 
+  private nextEpoch(): number {
+    this.epochCounter = Math.max(this.epochCounter, this.doc?.epoch ?? 0) + 1
+    return this.epochCounter
+  }
+
   private syncSourceMeta(): boolean {
     if (!this.doc) {
       return false
@@ -395,7 +400,7 @@ export class AppStore {
     }
     this.syncSourceMeta()
     this.doc.tiptap = json
-    this.doc.epoch += 1
+    this.doc.epoch = this.nextEpoch()
     this.doc.hint = hint
     this.doc.outline = collectOutline(json)
     this.emit()
@@ -546,7 +551,7 @@ export class AppStore {
     }
 
     doc.tiptap = toTiptapDocument(projectDocument(doc.buffer.map))
-    doc.epoch += 1
+    doc.epoch = this.nextEpoch()
     doc.outline = collectOutline(doc.tiptap)
     doc.dirty = doc.buffer.dirty
     doc.saveState = 'dirty'

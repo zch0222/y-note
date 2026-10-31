@@ -218,6 +218,20 @@ describe('AppStore document workflow', () => {
     expect(store.doc?.dirty).toBe(false)
   })
 
+  it('keeps document epochs strictly increasing across mode switches and reloads', async () => {
+    const gateway = new MemoryGateway({ [PATH]: '# Note\n\nhello\n' })
+    const store = await open(gateway)
+    const opened = store.doc!.epoch
+
+    store.setMode('source')
+    store.setMode('visual')
+    const projected = store.doc!.epoch
+    expect(projected).toBeGreaterThan(opened)
+
+    await store.reloadFromDisk()
+    expect(store.doc!.epoch).toBeGreaterThan(projected)
+  })
+
   it('restores a draft without touching the disk until an explicit save', async () => {
     const original = '# Note\n\nhello\n'
     const gateway = new MemoryGateway({ [PATH]: original })
