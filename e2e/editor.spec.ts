@@ -121,3 +121,122 @@ test('offers a reload for a clean external change without writing the disk', asy
   expect(await diskSource(page)).toBe('# 外部修改\n')
   expect(await page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.external)).toBe('none')
 })
+
+test('undoes and redoes an edit through the source bridge', async ({ page }) => {
+  await openDemo(page)
+  const initial = await hashes(page)
+  const initialSource = await source(page)
+
+  await insertAtEnd(page, ' 撤销测试')
+  await expect
+    .poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.dirty))
+    .toBe(true)
+  const edited = await hashes(page)
+
+  await page.evaluate(() => window.__YNOTE_DEBUG__!.focus())
+  await page.keyboard.press('Control+z')
+  await expect
+    .poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.dirty))
+    .toBe(false)
+  expect(await source(page)).toBe(initialSource)
+  expect((await hashes(page))!.current).toBe(initial!.current)
+
+  await page.evaluate(() => window.__YNOTE_DEBUG__!.store.editor!.commands.redo())
+  await expect
+    .poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.dirty))
+    .toBe(true)
+  expect(await source(page)).toContain('撤销测试')
+  expect((await hashes(page))!.current).toBe(edited!.current)
+
+  await page.keyboard.press('Control+s')
+  await expect
+    .poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.saveState))
+    .toBe('saved')
+  expect((await hashes(page))!.disk).toBe(edited!.current)
+})
+
+test('rolls back an unmappable table insertion', async ({ page }) => {
+  await openDemo(page)
+  const before = await source(page)
+  const tableCount = () =>
+    page.evaluate(
+      () =>
+        (window.__YNOTE_DEBUG__!.store.editor!.getJSON().content ?? []).filter(
+          node => node.type === 'table',
+        ).length,
+    )
+  const tablesBefore = await tableCount()
+
+  await page.evaluate(() => {
+    window.__YNOTE_DEBUG__!.store.editor!
+      .chain()
+      .focus('end')
+      .insertTable({ rows: 2, cols: 2, withHeaderRow: true })
+      .run()
+  })
+
+  await expect(page.locator('.toast')).toContainText('表格')
+  await expect.poll(tableCount).toBe(tablesBefore)
+  expect(await source(page)).toBe(before)
+  expect(await page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.dirty)).toBe(false)
+})
+
+test('does not carry undo history across documents', async ({ page }) => {
+  await openDemo(page)
+  await insertAtEnd(page, ' 第一篇编辑')
+  await page.keyboard.press('Control+s')
+  await expect
+    .poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.saveState))
+    .toBe('saved')
+
+  await page.evaluate(async () => {
+    await window.__YNOTE_DEBUG__!.store.openDemo('# 第二篇\n\n第二篇内容。\n', 'second.md')
+  })
+  await expect(page.locator('.ProseMirror')).toContainText('第二篇')
+  const before = await source(page)
+
+  await page.evaluate(() => window.__YNOTE_DEBUG__!.store.editor!.commands.undo())
+  const after = await source(page)
+  expect(after).toBe(before)
+  expect(after).toContain('第二篇')
+  expect(after).not.toContain('Clean by design')
+})
+
+test('commits an IME composition without dropping text', async ({ page, context }) => {
+  await openDemo(page)
+  await page.evaluate(() => window.__YNOTE_DEBUG__!.store.editor!.chain().focus('end').run())
+
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('Input.imeSetComposition', {
+    text: 'zhong',
+    selectionStart: 5,
+    selectionEnd: 5,
+  })
+  await cdp.send('Input.imeSetComposition', {
+    text: '中文',
+    selectionStart: 2,
+    selectionEnd: 2,
+  })
+  await cdp.send('Input.insertText', { text: '中文' })
+
+  await expect.poll(() => source(page)).toContain('中文')
+  const text = (await source(page))!
+  expect(text.split('中文')).toHaveLength(2)
+  const selection = await page.evaluate(() => {
+    const editor = window.__YNOTE_DEBUG__!.store.editor!
+    return {
+      empty: editor.state.selection.empty,
+      atEnd: editor.state.selection.$from.parent.textContent.endsWith('中文'),
+    }
+  })
+  expect(selection).toEqual({ empty: true, atEnd: true })
+  expect(
+    await page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.buffer.mapIssues.length),
+  ).toBe(0)
+
+  await page.keyboard.press('Control+s')
+  await expect
+    .poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.saveState))
+    .toBe('saved')
+  expect(await diskSource(page)).toContain('中文')
+})

@@ -35,7 +35,7 @@ export function EditorPane() {
       ) : (
         <div className="editor-scroll" id="editor-scroll">
           <div className="document visual-document">
-            <VisualEditor doc={doc} />
+            <VisualEditor key={doc.loadId} doc={doc} />
           </div>
         </div>
       )}

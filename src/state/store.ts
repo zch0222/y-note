@@ -39,6 +39,7 @@ export interface DocState {
   encoding: SourceEncoding
   eol: EolStyle
   lastSavedAt: number | null
+  loadId: number
   epoch: number
   hint?: SelectionHint
   external: ExternalState
@@ -97,6 +98,7 @@ export class AppStore {
   toast: Toast | null = null
   initialized = false
   private epochCounter = 0
+  private loadCounter = 0
   private draftTimer: ReturnType<typeof setTimeout> | null = null
   private metaTimer: ReturnType<typeof setTimeout> | null = null
   private toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -246,6 +248,7 @@ export class AppStore {
       encoding: envelope.encoding,
       eol: envelope.eol,
       lastSavedAt: Date.now(),
+      loadId: ++this.loadCounter,
       epoch: this.nextEpoch(),
       external: 'none',
       draft: hasDraft ? draft : null,
@@ -551,6 +554,7 @@ export class AppStore {
     }
 
     doc.tiptap = toTiptapDocument(projectDocument(doc.buffer.map))
+    doc.loadId = ++this.loadCounter
     doc.epoch = this.nextEpoch()
     doc.outline = collectOutline(doc.tiptap)
     doc.dirty = doc.buffer.dirty

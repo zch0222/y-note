@@ -63,7 +63,16 @@ export function VisualEditor({ doc }: { doc: DocState }) {
     const hadFocus = editor.view.hasFocus()
     const previousFrom = editor.state.selection.from
 
-    editor.commands.setContent(displayDocument(current.tiptap), { emitUpdate: false })
+    const next = displayDocument(current.tiptap)
+    let same = false
+    try {
+      same = editor.schema.nodeFromJSON(next).eq(editor.state.doc)
+    } catch {
+      same = false
+    }
+    if (!same) {
+      editor.commands.setContent(next, { emitUpdate: false })
+    }
     store.bridge?.syncFromEditor(editor.getJSON())
 
     const size = editor.state.doc.content.size
