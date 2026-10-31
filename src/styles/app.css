@@ -158,6 +158,15 @@
   cursor: default;
 }
 
+.button.danger {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.button.danger:hover {
+  background: var(--red-soft);
+}
+
 /* Document surface */
 
 .visual-editor {

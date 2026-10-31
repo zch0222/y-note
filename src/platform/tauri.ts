@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { open } from '@tauri-apps/plugin-dialog'
 
 import { sha256 } from '../source/encoding.js'
@@ -116,6 +117,24 @@ export function createTauriGateway(): DocumentGateway {
 
     async deleteDraft(path: string): Promise<void> {
       await invoke('delete_draft', { path })
+    },
+
+    async watchDocument(path: string, onChanged: () => void): Promise<() => Promise<void>> {
+      const unlisten = await listen<{ path: string }>('ynote://document-changed', event => {
+        if (event.payload?.path === path) {
+          onChanged()
+        }
+      })
+      try {
+        await invoke('watch_document', { path })
+      } catch (error) {
+        unlisten()
+        throw error
+      }
+      return async () => {
+        unlisten()
+        await invoke('unwatch_document').catch(() => undefined)
+      }
     },
   }
 }

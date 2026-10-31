@@ -29,6 +29,8 @@ export interface DocumentGateway {
   writeDraft(draft: Draft): Promise<void>
   readDraft(path: string): Promise<Draft | null>
   deleteDraft(path: string): Promise<void>
+  /** Watches one document; resolves with a disposer. Save-time SHA checks remain authoritative. */
+  watchDocument?(path: string, onChanged: () => void): Promise<() => void | Promise<void>>
   /** Registers an already-opened document, used by browser-only demo buffers. */
   registerDocument?(document: OpenedDocument): Promise<void>
 }

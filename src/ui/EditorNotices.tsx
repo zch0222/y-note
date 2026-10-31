@@ -97,9 +97,15 @@ export function EditorNotices({ doc }: { doc: DocState }) {
           <button className="button" type="button" onClick={() => void store.reloadFromDisk()}>
             重新载入
           </button>
-          <button className="button primary" type="button" onClick={() => void store.save()}>
-            再次尝试保存
-          </button>
+          {doc.dirty ? (
+            <button
+              className="button danger"
+              type="button"
+              onClick={() => void store.keepLocalConflict()}
+            >
+              保留本地
+            </button>
+          ) : null}
         </div>
       </div>,
     )

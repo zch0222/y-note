@@ -100,8 +100,9 @@ export class AppStore {
   private draftTimer: ReturnType<typeof setTimeout> | null = null
   private metaTimer: ReturnType<typeof setTimeout> | null = null
   private toastTimer: ReturnType<typeof setTimeout> | null = null
-  private pollTimer: ReturnType<typeof setInterval> | null = null
-  private pollBusy = false
+  private watchDispose: (() => void | Promise<void>) | null = null
+  private watchTimer: ReturnType<typeof setTimeout> | null = null
+  private watchBusy = false
 
   constructor(gateway: DocumentGateway) {
     this.gateway = gateway
@@ -255,7 +256,7 @@ export class AppStore {
     this.inspectorTab = 'outline'
     this.addRecent(opened.path)
     this.bindBridge()
-    this.startPolling()
+    await this.startWatching()
     this.updateTitle()
     this.emit()
   }
@@ -492,6 +493,42 @@ export class AppStore {
     }
   }
 
+  async keepLocalConflict(): Promise<void> {
+    const doc = this.doc
+    if (!doc || doc.readOnly || !doc.dirty || doc.external !== 'conflict') {
+      return
+    }
+    if (!window.confirm('将用当前本地内容覆盖磁盘上的外部修改，此操作无法撤销。继续？')) {
+      return
+    }
+
+    doc.saveState = 'saving'
+    this.emit()
+    try {
+      const diskSha = await this.gateway.hashFile(doc.path)
+      await this.gateway.writeDocument(doc.path, doc.buffer.currentBytes(), diskSha ?? '')
+      const sha = doc.buffer.markSaved()
+      doc.dirty = false
+      doc.saveState = 'saved'
+      doc.external = 'none'
+      doc.draft = null
+      doc.lastSavedAt = Date.now()
+      this.clearDraftTimer()
+      await this.gateway.deleteDraft(doc.path).catch(() => undefined)
+      this.updateTitle()
+      this.emit()
+      this.notify(`已用本地内容覆盖磁盘文件（${sha.slice(0, 12)}）。`)
+    } catch (error) {
+      doc.saveState = doc.dirty ? 'dirty' : 'saved'
+      if ((error as { code?: string }).code === 'disk-conflict') {
+        this.notify('磁盘文件在覆盖前再次变化，未写入任何内容。')
+      } else {
+        this.notify(`覆盖失败：${(error as Error).message ?? String(error)}`)
+      }
+      this.emit()
+    }
+  }
+
   async applyDraft(): Promise<void> {
     const doc = this.doc
     if (!doc?.draft) {
@@ -630,29 +667,60 @@ export class AppStore {
     }
   }
 
-  private startPolling(): void {
-    this.stopPolling()
-    if (this.gateway.kind !== 'tauri') {
-      return
-    }
-    this.pollTimer = setInterval(() => {
-      void this.pollDisk()
-    }, 3000)
-  }
-
-  private stopPolling(): void {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer)
-      this.pollTimer = null
-    }
-  }
-
-  private async pollDisk(): Promise<void> {
+  private async startWatching(): Promise<void> {
+    await this.stopWatching()
     const doc = this.doc
-    if (!doc || this.pollBusy || document.hidden) {
+    if (!doc || !this.gateway.watchDocument) {
       return
     }
-    this.pollBusy = true
+    try {
+      const dispose = await this.gateway.watchDocument(doc.path, () => {
+        if (this.doc === doc) {
+          this.scheduleExternalRefresh()
+        }
+      })
+      if (this.doc !== doc) {
+        dispose()
+        return
+      }
+      this.watchDispose = dispose
+    } catch {
+      this.notify('文件监听不可用；保存前仍会校验磁盘内容。')
+    }
+  }
+
+  private async stopWatching(): Promise<void> {
+    if (this.watchTimer) {
+      clearTimeout(this.watchTimer)
+      this.watchTimer = null
+    }
+    const dispose = this.watchDispose
+    this.watchDispose = null
+    if (dispose) {
+      try {
+        await dispose()
+      } catch {
+        // The watcher may already be gone after the window unloads.
+      }
+    }
+  }
+
+  private scheduleExternalRefresh(): void {
+    if (this.watchTimer) {
+      clearTimeout(this.watchTimer)
+    }
+    this.watchTimer = setTimeout(() => {
+      this.watchTimer = null
+      void this.refreshExternalState()
+    }, 150)
+  }
+
+  private async refreshExternalState(): Promise<void> {
+    const doc = this.doc
+    if (!doc || this.watchBusy || doc.saveState === 'saving') {
+      return
+    }
+    this.watchBusy = true
     try {
       const diskSha = await this.gateway.hashFile(doc.path)
       if (this.doc !== doc) {
@@ -665,17 +733,19 @@ export class AppStore {
         }
         return
       }
-      if (diskSha !== doc.buffer.baselineSha256 && doc.external === 'none') {
+      if (diskSha === doc.buffer.baselineSha256) {
+        if (doc.external !== 'none') {
+          doc.external = 'none'
+          this.emit()
+        }
+      } else if (doc.external === 'none') {
         doc.external = doc.dirty ? 'conflict' : 'external-change'
-        this.emit()
-      } else if (diskSha === doc.buffer.baselineSha256 && !doc.dirty && doc.external === 'external-change') {
-        doc.external = 'none'
         this.emit()
       }
     } catch {
       // Files can disappear while being replaced; the next explicit save reports it.
     } finally {
-      this.pollBusy = false
+      this.watchBusy = false
     }
   }
 }
