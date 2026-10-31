@@ -240,3 +240,26 @@ test('commits an IME composition without dropping text', async ({ page, context 
     .toBe('saved')
   expect(await diskSource(page)).toContain('中文')
 })
+
+test('shows the Git diff view in browser preview without touching the document', async ({
+  page,
+}) => {
+  await openDemo(page)
+  await page.evaluate(() => {
+    const store = window.__YNOTE_DEBUG__!.store
+    store.setInspectorTab('diff')
+    store.setDiffSource('git')
+  })
+
+  await expect(page.locator('.diff-source-switch button.active')).toHaveText('Git 差异')
+  await expect(page.locator('.git-state')).toContainText('文件不在 Git 仓库中')
+  expect(await page.evaluate(() => window.__YNOTE_DEBUG__!.store.git?.status)).toBe('not-repo')
+
+  const before = await hashes(page)
+  await page.keyboard.press('Control+s')
+  expect(await hashes(page)).toEqual(before)
+  expect(await page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.dirty)).toBe(false)
+
+  await page.evaluate(() => window.__YNOTE_DEBUG__!.store.setDiffSource('local'))
+  await expect(page.locator('.diff-source-switch button.active')).toHaveText('未保存改动')
+})

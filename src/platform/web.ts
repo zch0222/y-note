@@ -1,5 +1,11 @@
 import { sha256 } from '../source/encoding.js'
-import type { DocumentGateway, Draft, OpenedDocument, WorkspaceNode } from './types.js'
+import type {
+  DocumentGateway,
+  Draft,
+  GitDiff,
+  OpenedDocument,
+  WorkspaceNode,
+} from './types.js'
 
 const storagePrefix = 'ynote.draft.'
 
@@ -55,6 +61,21 @@ export function createWebGateway(): DocumentGateway {
     async hashFile(path: string): Promise<string | null> {
       const bytes = files.get(path)
       return bytes ? sha256(bytes) : null
+    },
+
+    async readGitDiff(): Promise<GitDiff> {
+      return {
+        repoRoot: null,
+        branch: null,
+        head: null,
+        status: 'not-repo',
+        additions: 0,
+        deletions: 0,
+        hunks: [],
+        binary: false,
+        truncated: false,
+        message: '浏览器预览不连接 Git 仓库，请在桌面版查看真实差异。',
+      }
     },
 
     async writeDraft(draft: Draft): Promise<void> {

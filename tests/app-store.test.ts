@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   DocumentGateway,
   Draft,
+  GitDiff,
   OpenedDocument,
   WorkspaceNode,
 } from '../src/platform/types.js'
@@ -32,10 +33,26 @@ function draftFor(source: string, baseline: string): Draft {
   }
 }
 
+const CLEAN_GIT: GitDiff = {
+  repoRoot: 'C:/notes',
+  branch: 'main',
+  head: 'abc1234',
+  status: 'clean',
+  additions: 0,
+  deletions: 0,
+  hunks: [],
+  binary: false,
+  truncated: false,
+  message: null,
+}
+
 class MemoryGateway implements DocumentGateway {
   readonly kind = 'tauri' as const
   files = new Map<string, Uint8Array>()
   drafts = new Map<string, Draft>()
+  gitSnapshot: GitDiff = CLEAN_GIT
+  gitReads = 0
+  gitFailure: Error | null = null
   watchStarts = 0
   private watchHandler: (() => void) | null = null
 
@@ -84,6 +101,14 @@ class MemoryGateway implements DocumentGateway {
     return bytes ? sha256(bytes) : null
   }
 
+  async readGitDiff(_path: string): Promise<GitDiff> {
+    this.gitReads += 1
+    if (this.gitFailure) {
+      throw this.gitFailure
+    }
+    return this.gitSnapshot
+  }
+
   async writeDraft(draft: Draft): Promise<void> {
     this.drafts.set(draft.path, draft)
   }
@@ -122,6 +147,12 @@ async function open(gateway: MemoryGateway): Promise<AppStore> {
 async function advanceWatch(): Promise<void> {
   await vi.advanceTimersByTimeAsync(200)
   await Promise.resolve()
+}
+
+async function flushAsync(): Promise<void> {
+  for (let index = 0; index < 5; index += 1) {
+    await Promise.resolve()
+  }
 }
 
 describe('AppStore document workflow', () => {
@@ -230,6 +261,62 @@ describe('AppStore document workflow', () => {
 
     await store.reloadFromDisk()
     expect(store.doc!.epoch).toBeGreaterThan(projected)
+  })
+
+  it('loads and refreshes the read-only Git diff after open and save', async () => {
+    const gateway = new MemoryGateway({ [PATH]: '# Note\n\nhello\n' })
+    gateway.gitSnapshot = {
+      ...CLEAN_GIT,
+      status: 'modified',
+      additions: 1,
+      deletions: 1,
+      hunks: [
+        {
+          oldStart: 1,
+          oldLines: 3,
+          newStart: 1,
+          newLines: 3,
+          lines: [
+            { kind: 'context', text: '# Note', oldLine: 1, newLine: 1 },
+            { kind: 'removed', text: 'hello', oldLine: 3, newLine: null },
+            { kind: 'added', text: 'hello world', oldLine: null, newLine: 3 },
+          ],
+        },
+      ],
+    }
+
+    const store = await open(gateway)
+    await flushAsync()
+
+    expect(gateway.gitReads).toBe(1)
+    expect(store.git?.status).toBe('modified')
+    expect(store.git?.hunks[0]?.lines[2]?.text).toBe('hello world')
+    expect(store.gitLoading).toBe(false)
+
+    gateway.gitSnapshot = CLEAN_GIT
+    store.applySourceText('# Note\n\nhello world\n')
+    await store.save()
+    await flushAsync()
+
+    expect(gateway.gitReads).toBe(2)
+    expect(store.git?.status).toBe('clean')
+    expect(store.git?.hunks).toEqual([])
+  })
+
+  it('reports Git diff failures without breaking the document', async () => {
+    const gateway = new MemoryGateway({ [PATH]: '# Note\n\nhello\n' })
+    gateway.gitFailure = new Error('git unavailable')
+    const store = await open(gateway)
+    await flushAsync()
+
+    expect(store.git).toBeNull()
+    expect(store.gitError).toContain('git unavailable')
+    expect(store.doc?.buffer.current).toBe('# Note\n\nhello\n')
+
+    gateway.gitFailure = null
+    await store.refreshGitDiff()
+    expect(store.gitError).toBeNull()
+    expect(store.git?.status).toBe('clean')
   })
 
   it('restores a draft without touching the disk until an explicit save', async () => {

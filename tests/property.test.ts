@@ -108,6 +108,9 @@ describe('randomised invariants', () => {
         const first = bufferFor(source)
         const second = bufferFor(source)
         const paragraphs = paragraphsOf(first)
+        if (paragraphs.length === 0) {
+          return
+        }
         const block = paragraphs[edit.block % paragraphs.length]!
         const leaves = textLeaves(block)
         if (leaves.length === 0) {

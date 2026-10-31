@@ -318,8 +318,95 @@ try {
     .split('\n')
     .filter(line => line.startsWith('+') && !line.startsWith('+++')).length
   check('Git Diff 只有一个 hunk 和一行增删', hunks === 1 && removed === 1 && added === 1)
+
+  // 3b. The read-only Git panel must match the real CLI diff.
+  await page.evaluate(() => {
+    const store = window.__YNOTE_DEBUG__.store
+    store.setDiffSource('git')
+    store.setInspectorTab('diff')
+  })
+  await page.waitForFunction(
+    () => window.__YNOTE_DEBUG__?.store?.git?.status === 'modified',
+    null,
+    { timeout: 8000 },
+  )
+  const gitPanel = await page.evaluate(() => {
+    const store = window.__YNOTE_DEBUG__.store
+    const texts = selector =>
+      [...document.querySelectorAll(selector)].map(node => node.textContent ?? '')
+    return {
+      status: store.git.status,
+      additions: store.git.additions,
+      deletions: store.git.deletions,
+      hunks: store.git.hunks.length,
+      branch: store.git.branch,
+      head: store.git.head,
+      switchLabel: document.querySelector('.diff-source-switch button.active')?.textContent?.trim(),
+      summary: document.querySelector('.diff-summary .file-status')?.textContent?.trim(),
+      addedRows: texts('.git-diff-line.added .line-text'),
+      removedRows: texts('.git-diff-line.removed .line-text'),
+    }
+  })
+  const cliNumstat = git(['diff', '--numstat', 'HEAD', '--', 'lf.md']).split('\t')
+  check('Git 面板状态与 CLI 一致', gitPanel.status === 'modified')
+  check(
+    'Git 面板行数与 CLI numstat 一致',
+    gitPanel.additions === Number(cliNumstat[0]) &&
+      gitPanel.deletions === Number(cliNumstat[1]),
+    `${gitPanel.additions}/${gitPanel.deletions} vs ${cliNumstat[0]}/${cliNumstat[1]}`,
+  )
+  check('Git 面板 hunk 数与 CLI 一致', gitPanel.hunks === hunks)
+  check(
+    'Git 面板分支与 HEAD 与 CLI 一致',
+    gitPanel.branch === git(['rev-parse', '--abbrev-ref', 'HEAD']) &&
+      gitPanel.head === git(['rev-parse', '--short', 'HEAD']),
+    `${gitPanel.branch}@${gitPanel.head}`,
+  )
+  check('改动面板默认显示 Git 差异', gitPanel.switchLabel === 'Git 差异')
+  check('Git 面板状态文案正确', gitPanel.summary === '工作区已修改', gitPanel.summary)
+  check(
+    'Git 面板渲染真实增删行',
+    gitPanel.addedRows.some(text => text.includes('原生验收编辑')) &&
+      gitPanel.removedRows.some(text => text.includes('任务')),
+    JSON.stringify({ added: gitPanel.addedRows, removed: gitPanel.removedRows }),
+  )
+
   checkpoint('single edit')
+  await page.evaluate(() => window.__YNOTE_DEBUG__.store.refreshGitDiff())
+  await page.waitForFunction(
+    () =>
+      window.__YNOTE_DEBUG__?.store?.git?.status === 'clean' &&
+      (document.querySelector('.diff-panel .panel-placeholder')?.textContent ?? '').includes(
+        'HEAD 版本一致',
+      ),
+    null,
+    { timeout: 8000 },
+  )
+  const cleanGit = await page.evaluate(() => ({
+    status: window.__YNOTE_DEBUG__.store.git?.status,
+    empty: document.querySelector('.diff-panel .panel-placeholder')?.textContent ?? '',
+  }))
   check('检查点后 Git 工作区干净', gitStatus() === '')
+  check(
+    '检查点后 Git 面板显示无差异',
+    cleanGit.status === 'clean' && cleanGit.empty.includes('HEAD 版本一致'),
+    cleanGit.empty,
+  )
+
+  // 3c. Unsaved buffer edits must not leak into the read-only Git diff.
+  await insertAtEnd(' 未保存不进入 Git')
+  await page.evaluate(() => window.__YNOTE_DEBUG__.store.refreshGitDiff())
+  const unsavedGit = await page.evaluate(() => ({
+    status: window.__YNOTE_DEBUG__.store.git?.status,
+    lines: document.querySelectorAll('.git-diff-line').length,
+  }))
+  check(
+    '未保存编辑不进入 Git 差异',
+    unsavedGit.status === 'clean' && unsavedGit.lines === 0,
+    JSON.stringify(unsavedGit),
+  )
+  await undoCommand()
+  await waitState({ dirty: false })
 
   // 4. Draft stays outside the Git workspace.
   await openPath(FILE_C)

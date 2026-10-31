@@ -12,13 +12,20 @@ import { SourceBuffer } from '../source/SourceBuffer.js'
 import { saveDocument } from '../source/save.js'
 import type { SaveIO } from '../source/save.js'
 import type { EolStyle, ReadOnlyReason, SourceEncoding, SourceEdit } from '../source/types.js'
-import type { DocumentGateway, Draft, OpenedDocument, WorkspaceNode } from '../platform/types.js'
+import type {
+  DocumentGateway,
+  Draft,
+  GitDiff,
+  OpenedDocument,
+  WorkspaceNode,
+} from '../platform/types.js'
 
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
 export type ExternalState = 'none' | 'external-change' | 'conflict'
 export type EditorMode = 'visual' | 'source'
 export type Theme = 'light' | 'dark'
 export type InspectorTab = 'outline' | 'diff'
+export type DiffSource = 'git' | 'local'
 
 export interface RecentFile {
   path: string
@@ -93,10 +100,15 @@ export class AppStore {
   theme: Theme = 'light'
   mode: EditorMode = 'visual'
   inspectorTab: InspectorTab = 'outline'
+  diffSource: DiffSource = 'git'
   panelOpen = true
   sidebarFilter = ''
   toast: Toast | null = null
   initialized = false
+  git: GitDiff | null = null
+  gitLoading = false
+  gitError: string | null = null
+  private gitToken = 0
   private epochCounter = 0
   private loadCounter = 0
   private draftTimer: ReturnType<typeof setTimeout> | null = null
@@ -228,6 +240,7 @@ export class AppStore {
       }
     }
 
+    this.resetGit()
     const envelope = openEnvelope(opened.path, opened.bytes)
     const buffer = new SourceBuffer(envelope)
     const projected = projectDocument(buffer.map)
@@ -262,6 +275,7 @@ export class AppStore {
     await this.startWatching()
     this.updateTitle()
     this.emit()
+    void this.refreshGitDiff()
   }
 
   async openWorkspace(): Promise<void> {
@@ -342,6 +356,58 @@ export class AppStore {
       localStorage.setItem(PANEL_KEY, 'open')
     }
     this.emit()
+    if (tab === 'diff' && this.doc) {
+      void this.refreshGitDiff()
+    }
+  }
+
+  setDiffSource(source: DiffSource): void {
+    this.diffSource = source
+    this.emit()
+    if (source === 'git' && this.doc) {
+      void this.refreshGitDiff()
+    }
+  }
+
+  async refreshGitDiff(): Promise<void> {
+    const doc = this.doc
+    if (!doc || !this.gateway.readGitDiff) {
+      this.git = null
+      this.gitError = null
+      this.gitLoading = false
+      this.emit()
+      return
+    }
+
+    const token = ++this.gitToken
+    this.gitLoading = true
+    this.gitError = null
+    this.emit()
+    try {
+      const snapshot = await this.gateway.readGitDiff(doc.path)
+      if (token !== this.gitToken || this.doc !== doc) {
+        return
+      }
+      this.git = snapshot
+    } catch (error) {
+      if (token !== this.gitToken || this.doc !== doc) {
+        return
+      }
+      this.git = null
+      this.gitError = (error as Error).message ?? String(error)
+    } finally {
+      if (token === this.gitToken && this.doc === doc) {
+        this.gitLoading = false
+        this.emit()
+      }
+    }
+  }
+
+  private resetGit(): void {
+    this.gitToken += 1
+    this.git = null
+    this.gitLoading = false
+    this.gitError = null
   }
 
   togglePanel(): void {
@@ -452,6 +518,7 @@ export class AppStore {
         await this.gateway.deleteDraft(doc.path).catch(() => undefined)
         this.updateTitle()
         this.emit()
+        void this.refreshGitDiff()
         return
       }
 
@@ -466,6 +533,7 @@ export class AppStore {
         doc.external = 'conflict'
         doc.saveState = doc.dirty ? 'dirty' : 'saved'
         this.emit()
+        void this.refreshGitDiff()
         this.notify('磁盘文件已被外部修改，未写入任何内容。')
         return
       }
@@ -474,6 +542,7 @@ export class AppStore {
         doc.external = 'external-change'
         doc.saveState = 'saved'
         this.emit()
+        void this.refreshGitDiff()
         this.notify('磁盘文件已变化；当前没有本地修改，可重新加载。')
         return
       }
@@ -525,6 +594,7 @@ export class AppStore {
       await this.gateway.deleteDraft(doc.path).catch(() => undefined)
       this.updateTitle()
       this.emit()
+      void this.refreshGitDiff()
       this.notify(`已用本地内容覆盖磁盘文件（${sha.slice(0, 12)}）。`)
     } catch (error) {
       doc.saveState = doc.dirty ? 'dirty' : 'saved'
@@ -739,6 +809,7 @@ export class AppStore {
         if (doc.external !== 'conflict') {
           doc.external = 'conflict'
           this.emit()
+          void this.refreshGitDiff()
         }
         return
       }
@@ -746,10 +817,12 @@ export class AppStore {
         if (doc.external !== 'none') {
           doc.external = 'none'
           this.emit()
+          void this.refreshGitDiff()
         }
       } else if (doc.external === 'none') {
         doc.external = doc.dirty ? 'conflict' : 'external-change'
         this.emit()
+        void this.refreshGitDiff()
       }
     } catch {
       // Files can disappear while being replaced; the next explicit save reports it.

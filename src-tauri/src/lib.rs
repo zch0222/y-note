@@ -1,10 +1,12 @@
 mod document;
+mod git;
 mod watch;
 mod workspace;
 
 use document::{
     delete_draft, hash_file, read_document, read_draft, write_document_atomic, write_draft,
 };
+use git::read_git_diff;
 use watch::{unwatch_document, watch_document, WatchState};
 use workspace::list_workspace;
 
@@ -22,7 +24,8 @@ pub fn run() {
             read_draft,
             delete_draft,
             watch_document,
-            unwatch_document
+            unwatch_document,
+            read_git_diff
         ])
         .run(tauri::generate_context!())
         .expect("error while running Y Note");

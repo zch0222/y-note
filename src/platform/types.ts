@@ -18,6 +18,44 @@ export interface OpenedDocument {
   sha256: string
 }
 
+export type GitStatus =
+  | 'clean'
+  | 'modified'
+  | 'staged'
+  | 'untracked'
+  | 'deleted'
+  | 'ignored'
+  | 'unborn'
+  | 'not-repo'
+
+export interface GitDiffLine {
+  kind: 'context' | 'added' | 'removed'
+  text: string
+  oldLine: number | null
+  newLine: number | null
+}
+
+export interface GitHunk {
+  oldStart: number
+  oldLines: number
+  newStart: number
+  newLines: number
+  lines: GitDiffLine[]
+}
+
+export interface GitDiff {
+  repoRoot: string | null
+  branch: string | null
+  head: string | null
+  status: GitStatus
+  additions: number
+  deletions: number
+  hunks: GitHunk[]
+  binary: boolean
+  truncated: boolean
+  message: string | null
+}
+
 export interface DocumentGateway {
   readonly kind: 'tauri' | 'web'
   openFile(): Promise<OpenedDocument | null>
@@ -29,6 +67,8 @@ export interface DocumentGateway {
   writeDraft(draft: Draft): Promise<void>
   readDraft(path: string): Promise<Draft | null>
   deleteDraft(path: string): Promise<void>
+  /** Read-only HEAD-vs-worktree diff for the file's repository. */
+  readGitDiff?(path: string): Promise<GitDiff>
   /** Watches one document; resolves with a disposer. Save-time SHA checks remain authoritative. */
   watchDocument?(path: string, onChanged: () => void): Promise<() => void | Promise<void>>
   /** Registers an already-opened document, used by browser-only demo buffers. */

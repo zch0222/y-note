@@ -6,6 +6,7 @@ import { sha256 } from '../source/encoding.js'
 import type {
   DocumentGateway,
   Draft,
+  GitDiff,
   OpenedDocument,
   WorkspaceNode,
 } from './types.js'
@@ -105,6 +106,10 @@ export function createTauriGateway(): DocumentGateway {
 
     async hashFile(path: string): Promise<string | null> {
       return invoke<string | null>('hash_file', { path })
+    },
+
+    async readGitDiff(path: string): Promise<GitDiff> {
+      return invoke<GitDiff>('read_git_diff', { path })
     },
 
     async writeDraft(draft: Draft): Promise<void> {

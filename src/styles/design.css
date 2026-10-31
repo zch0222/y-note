@@ -277,9 +277,17 @@
     .diff-panel { display: none; }
     .inspector[data-panel="diff"] .outline-panel { display: none; }
     .inspector[data-panel="diff"] .diff-panel { display: block; }
+    .diff-source-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border: 1px solid var(--line); background: var(--paper); border-radius: 8px; margin-bottom: 12px; }
+    .diff-source-switch button { height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 9.5px; cursor: pointer; }
+    .diff-source-switch button:hover { color: var(--text); }
+    .diff-source-switch button.active { background: var(--accent); color: #fff; }
     .diff-summary { border: 1px solid var(--line); background: var(--paper); border-radius: 9px; padding: 14px; margin-bottom: 18px; }
     .diff-summary-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
     .diff-branch { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; }
+    .diff-summary-actions { display: flex; align-items: center; gap: 8px; }
+    .diff-summary-actions .icon-button { width: 22px; height: 22px; }
+    .diff-summary-actions .icon-button:disabled { opacity: .45; cursor: default; }
+    .diff-summary-actions .icon-button:disabled:hover { background: transparent; color: var(--muted); }
     .diff-count { font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; }
     .diff-count .add { color: var(--green); }
     .diff-count .remove { color: var(--red); margin-left: 5px; }
@@ -299,6 +307,19 @@
     .diff-line.added { background: var(--green-soft); color: var(--green); }
     .diff-line.removed { background: var(--red-soft); color: var(--red); }
     .diff-gap { padding: 5px 10px 5px 38px; color: var(--faint); background: var(--panel); font-size: 8px; }
+    .git-diff { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--paper); margin-bottom: 18px; }
+    .git-hunk + .git-hunk { border-top: 1px solid var(--line); }
+    .git-hunk-head { padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted); font: 8px/1.5 "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+    .git-diff-line { display: grid; grid-template-columns: 24px 24px 15px 1fr; min-height: 18px; font: 8.5px/1.9 "SFMono-Regular", Consolas, monospace; }
+    .git-diff-line .line-no { color: var(--faint); text-align: right; padding-right: 5px; user-select: none; }
+    .git-diff-line .sign { text-align: center; user-select: none; }
+    .git-diff-line .line-text { white-space: pre-wrap; word-break: break-word; padding-right: 8px; }
+    .git-diff-line.context { color: var(--muted); }
+    .git-diff-line.added { background: var(--green-soft); color: var(--green); }
+    .git-diff-line.removed { background: var(--red-soft); color: var(--red); }
+    .git-state { border: 1px solid var(--line); border-radius: 9px; background: var(--paper); padding: 14px; color: var(--muted); font-size: 9.5px; line-height: 1.7; margin-bottom: 18px; }
+    .git-state strong { display: block; color: var(--text-soft); font-size: 10.5px; margin-bottom: 4px; }
+    .git-state .button { margin-top: 10px; height: 27px; }
     .verify-list { border: 1px solid var(--line); border-radius: 9px; background: var(--paper); padding: 6px 12px; margin-bottom: 18px; }
     .verify-row { display: flex; align-items: center; gap: 8px; min-height: 34px; border-bottom: 1px solid var(--line); font-size: 9.5px; color: var(--text-soft); }
     .verify-row:last-child { border-bottom: 0; }
