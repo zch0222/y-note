@@ -1,7 +1,7 @@
 # Y Note 进度与里程碑
 
-最后更新：2026-10-31  
-当前阶段：**M0 已完成；M1 原生窗口打开/保存、文件监听与冲突处置已验收；中文 IME、草稿强制退出恢复与三平台仍待验证**
+最后更新：2026-11-01
+当前阶段：**M0、M1 已完成（Windows 原生验收与自动化 E2E 全部通过）；M2 Git 可观察性与性能未开始**
 技术方向：React 19 · Tiptap 3.30.3 · Tauri 2 · Windows / macOS / Linux
 
 本文只记录已经验证的进展，不以代码量或主观百分比代替完成状态。里程碑只有在对应验收条件全部通过后才能标记为完成。
@@ -22,13 +22,13 @@
 | M0 UI 级无操作验收 | 已完成 | 浏览器预览中打开演示文件 → 聚焦 → 源码/视觉切换 → 保存，SHA-256 前后一致且 `dirty=false` |
 | React + Vite + Tauri 应用脚手架 | 已完成 | React 19.2.9、Vite 8.3.5、Tauri 2.12.4；前端生产构建与原生 debug 二进制构建均通过 |
 | Tiptap 投影与编辑桥接 | 已完成 | `src/editor/`：sourceId schema、投影接入、增量 patch、选区提示回传；浏览器预览验证 |
-| 文件打开与保存 | 已完成（原生窗口验收） | 真实 Tauri 窗口通过 IPC 打开真实 `.md`，Tiptap 编辑 + Ctrl/Cmd+S 保存，Node 外部读取与 SHA 校验通过；原生文件选择框未自动化 |
-| 草稿与最近文件 | 部分完成 | 浏览器用 localStorage；Tauri 用应用数据目录 `drafts/`，不写仓库；原生恢复流程待验证 |
-| 所见即所得编辑 | 部分完成 | 段落、标题、粗体/斜体/删除线/行内代码、列表、引用、代码块、任务勾选已接入；表格结构编辑与图片插入未开放 |
+| 文件打开与保存 | 已完成（原生窗口验收） | 真实 Tauri 窗口经原生文件选择框和 IPC 打开真实 `.md`，Tiptap 编辑 + Ctrl/Cmd+S 保存，Node 外部读取与 SHA 校验通过 |
+| 草稿与最近文件 | 已完成（Windows 实机） | 草稿只写应用数据目录；强制结束进程后重启可恢复并保存；最近文件、工作区树和子目录文件打开已验证 |
+| 所见即所得编辑 | 部分完成 | 段落、标题、粗体/斜体/删除线/行内代码、列表、引用、代码块、任务勾选已接入；表格结构编辑与图片插入仍只在源码模式处理 |
 | 原生文件监听 | 已完成（Windows 实机） | Rust `notify` watcher 在真实窗口捕获外部写入与删除；保存前 SHA 校验仍为兜底；网络盘待验证 |
 | 冲突态处置 | 已完成（Windows 实机） | 重新载入与保留本地在真实窗口通过；冲突保存不覆盖磁盘，删除文件后可重建 |
-| 自动化 E2E | 已完成（浏览器 + 原生窗口） | Playwright 3 条 + Windows/WebView2 原生验收 27 项（`npm run test:native`）；原生文件选择框未覆盖 |
-| 三平台原生验证 | 未开始 | 尚无 Windows、macOS、Linux 安装包或实机结果 |
+| 自动化 E2E | 已完成（浏览器 + 原生窗口） | 7 条 Playwright 浏览器 E2E + 55 项 Windows/WebView2 原生验收 + 12 项强制退出草稿恢复验收 |
+| 三平台原生验证 | 未开始 | 尚无 macOS、Linux 安装包或实机结果 |
 
 ## 2. 已完成阶段：产品与架构设计
 
@@ -55,7 +55,7 @@
 | 里程碑 | 目标 | 状态 | 完成前提 |
 |---|---|---|---|
 | M0 无损内核证明 | 证明局部编辑不会产生全文格式差异 | 已完成 | 干净 Diff 合同、自动化测试与 UI 级无操作验收全部通过 |
-| M1 可用本地编辑器 | 打开、编辑、保存真实 Markdown 文件 | 进行中：Windows 原生打开/保存、监听与冲突已验收；IME 与草稿强制退出恢复待验证 | 核心编辑闭环、恢复和冲突保护通过端到端验证 |
+| M1 可用本地编辑器 | 打开、编辑、保存真实 Markdown 文件 | 已完成（Windows）：全部退出条件与自动化验收通过；macOS/Linux 未验证 | 核心编辑闭环、恢复和冲突保护通过端到端验证 |
 | M2 Git 可观察性与性能 | 看清真实修改，满足长文档性能预算 | 未开始 | 只读 Diff、长文档与三平台压力测试通过 |
 | M3 视觉完善与发布 | 形成可分发的跨平台桌面产品 | 未开始 | UI、可访问性、安装包和发布检查全部通过 |
 
@@ -106,10 +106,13 @@ npm run typecheck                                    # 仅类型检查
 npm run test:e2e                                     # Playwright 浏览器 E2E，使用本机 Edge
 # 原生验收需先启动带 WebView2 CDP 的应用（另开终端）：
 # WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 npm run tauri -- dev --no-watch
-npm run test:native                                  # Windows 原生窗口 27 项验收
+npm run test:native                                  # Windows 原生窗口 55 项验收
+npm run test:native:draft:prepare                    # 强制退出草稿恢复：准备阶段
+# 强制结束应用并重启后：
+npm run test:native:draft:verify                     # 强制退出草稿恢复：验证阶段
 ```
 
-最近一次结果（2026-10-31，原生窗口验收后复测）：`npm run check` 通过，8 个测试文件共 187 个测试通过，耗时约 0.7 s；`tsc --noEmit` 无错误；`npm run build` 生产构建通过（JS 805.43 kB，gzip 251.47 kB，Vite 提示超过 500 kB 预算）。
+最近一次结果（2026-11-01，M1 完成后复测）：`npm run check` 通过，8 个测试文件共 187 个测试通过；`tsc --noEmit` 无错误；`npm run build` 生产构建通过（JS 805.57 kB，gzip 251.53 kB，Vite 提示超过 500 kB 预算）。
 
 ### 退出条件
 
@@ -148,7 +151,7 @@ npm run test:native                                  # Windows 原生窗口 27 �
 
 ### 实现状态
 
-完成时间：2026-10-31（浏览器预览闭环、浏览器 E2E 与 Windows 原生窗口验收）；中文 IME 与草稿强制退出恢复尚未完成。
+完成时间：2026-11-01（Windows 原生验收、浏览器 E2E、强制退出草稿恢复）；macOS/Linux 与表格结构/图片插入不在本次完成范围。
 
 运行环境：Windows 10.0.26200 x64，Node v22.23.2，npm 10.9.8，TypeScript 5.9.3，Vitest 4.1.12，React 19.2.9，Vite 8.3.5，Tiptap 3.30.3，Tauri CLI/API 2.12.4（crate 2.12.5），Rust 1.98.0。
 
@@ -160,7 +163,9 @@ npm run test:native                                  # Windows 原生窗口 27 �
 | 增量编辑桥 | `src/editor/bridge.ts` | 扁平块差异分派；S1 文本、S2 代码内容、标题层级、S3 行内标记/任务/列表标记；容器结构变化走 S4 顶层区间重建；无法安全映射时回滚并提示；块索引 + 偏移的选区提示往返 |
 | 文件工作流 | `src/state/store.ts` | 打开、保存、最近文件、原生 watcher 外部修改检测、冲突保护与“重新载入/保留本地”、草稿恢复/丢弃、只读降级 |
 | Tauri 后端 | `src-tauri/src/` | 临时文件 + fsync + 原子 rename、权限保留、SHA 冲突检测、文件缺失分支、草稿读写删除（应用数据目录）、工作区树、`notify` 文档目录监听与事件 |
-| 自动化验证 | `tests/app-store.test.ts`、`e2e/editor.spec.ts`、`playwright.config.ts`、`scripts/native-acceptance.mjs` | 7 条应用层集成测试；3 条 Playwright 浏览器 E2E；Windows/WebView2 原生窗口 27 项验收 |
+| 自动化验证 | `tests/app-store.test.ts`、`e2e/editor.spec.ts`、`playwright.config.ts` | 7 条应用层集成测试；7 条 Playwright 浏览器 E2E |
+| 原生验收工具 | `scripts/native-acceptance.mjs`、`scripts/select-open-file.ps1`、`scripts/close-open-dialogs.ps1` | 55 项 Windows/WebView2 原生验收，含真实文件选择框、Git 工作区/单点 Diff、文件树/最近文件、IME、撤销/重做与回滚 |
+| 草稿恢复验收 | `scripts/native-draft-recovery.mjs` | prepare/verify 两阶段：编辑不保存 → 强制结束进程 → 重启 → 恢复草稿 → 保存，12 项通过 |
 
 ### 验证记录（浏览器预览）
 
@@ -183,63 +188,89 @@ npm run test:native                                  # Windows 原生窗口 27 �
 | 浏览器 E2E：无操作保存 | 源码/视觉切换后按 Ctrl+S，基线、当前与磁盘 SHA 均不变 |
 | 浏览器 E2E：冲突—保留本地 | 冲突保存不写盘；确认后本地内容覆盖磁盘，`external='none'` |
 | 浏览器 E2E：外部修改—重新载入 | 清空缓冲区时保存不写盘；重新载入后源码等于外部内容，`external='none'` |
+| 浏览器 E2E：撤销/重做 | 文本编辑后撤销恢复原文、重做恢复编辑；保存后磁盘与重做内容一致 |
+| 浏览器 E2E：结构回滚 | 插入表格被拒绝，表格数量不变、源码不变、提示可见 |
+| 浏览器 E2E：跨文档历史 | 打开第二篇文档后撤销不会回到上一篇的内容 |
+| 浏览器 E2E：IME composition | CDP composition 提交“中文”无丢字，选区在末尾，映射问题 0 |
 | 应用层集成测试 | 7 条通过：保存、外部变更、脏缓冲冲突、保留本地（确认/取消）、删除后重建、草稿恢复不写盘、epoch 单调性 |
 
-### 验证记录（原生窗口，2026-10-31）
+### 验证记录（原生窗口，2026-11-01）
 
-在 Windows 上用 Tauri 2.12.5 原生窗口运行，通过 WebView2 CDP 驱动页面并调用真实 Tauri IPC。验收文件位于系统临时目录，结束后删除；`npm run test:native` 27 项全部通过。
+在 Windows 上用 Tauri 2.12.5 原生窗口运行，通过 WebView2 CDP 驱动页面并调用真实 Tauri IPC；Git 验收使用临时仓库，结束后删除。`npm run test:native` 55 项全部通过。
 
 | 场景 | 结果 |
 |---|---|
+| 原生文件选择框 | Win32 自动化设置文件名并确认，真实 `.md` 打开成功 |
 | 打开真实 LF 文件 | 路径、源码、UTF-8/LF 识别一致；基线 SHA 等于磁盘 SHA |
-| 无操作保存（Ctrl/Cmd+S） | 源码/视觉切换后保存，磁盘字节不变 |
+| 默认闲置 / 无操作保存 | 等待和源码/视觉切换后保存均不改变磁盘字节，Git 工作区保持干净 |
+| 单点修改的 Git Diff | 仅目标文件被修改，Diff 只有一个 hunk、一行删除和一行新增 |
+| 草稿与 Git 工作区 | 草稿只写应用数据目录；丢弃草稿后 Git 工作区仍干净 |
+| 工作区树与最近文件 | 原生读取文件夹树、展开子目录并打开文件；最近文件记录正确 |
 | Tiptap 编辑保存 | 编辑写入磁盘；未编辑前缀与行数不变；无 `.ynote.tmp` 残留；基线/缓冲/磁盘 SHA 一致 |
 | 原生 watcher 外部修改 | 真实外部写入后进入 `external-change`，提示可见 |
 | 重新载入 | 缓冲区与编辑器均显示外部内容；不写磁盘 |
 | 冲突 | 脏缓冲 + 外部写入进入 `conflict`；保存被拒、磁盘不变；保留本地后覆盖磁盘 |
 | 文件删除 | 保存不重建文件；保留本地重建并写入本地缓冲内容 |
 | BOM + CRLF + 无末尾换行 | 编码/EOL 识别正确；无操作保存字节不变；编辑后 BOM、CRLF 与无末尾换行保持 |
+| 中文 IME composition | CDP composition 提交“中文”无丢字，选区在末尾，映射问题 0 |
+| 撤销/重做与跨文档历史 | 撤销恢复原文、重做恢复输入；打开新文档后撤销不会回到旧文档 |
+| 结构回滚 | 插入表格被拒绝，表格数量与源码不变，提示可见 |
 | 只读文件 | 保存失败，原文件 SHA 不变 |
-| 缺陷修复 | 发现重新载入时 epoch 碰撞导致编辑器不刷新；改为全局单调 epoch，并新增 187 项测试与浏览器 E2E 断言 |
+| 缺陷修复 | 修复重新载入 epoch 碰撞、重投影清空重做栈、跨文档历史污染；均加入回归断言 |
 
-验收边界：通过 Tauri IPC 直接打开真实路径，未自动化原生文件选择框；中文 IME 未包含在本轮验收中。
+验收边界：文件选择框已通过 Win32 自动化；IME 使用 Chromium composition 协议模拟，真实系统输入法候选窗交互未自动化。
+
+### 验证记录（强制退出草稿恢复，2026-11-01）
+
+`prepare` 阶段编辑不保存，确认草稿写入应用数据目录且 Git 工作区干净；随后按 PID 强制结束进程，重启应用执行 `verify`。12 项全部通过：
+
+| 场景 | 结果 |
+|---|---|
+| 进程退出后草稿仍在 | 应用数据目录中的草稿文件保留 |
+| 重启后检测到草稿 | 打开同一文件后出现草稿恢复提示 |
+| 恢复前磁盘与 Git | 磁盘仍是原文，Git 工作区干净 |
+| 恢复草稿 | 缓冲区恢复未保存内容，磁盘仍未写入，Git 工作区不变 |
+| 保存恢复内容 | 磁盘写入恢复内容，草稿文件删除，Git Diff 只有一行增删 |
 
 自动化与构建结果：
 
 - `npm run check`：8 个测试文件、187 个测试通过，`tsc --noEmit` 无错误。
-- `npm run test:e2e`：3 条 Playwright 测试通过（本机 Edge 1440×900，Vite dev server 自动启动）。
-- `npm run test:native`：Windows/WebView2 原生窗口 27 项通过；需先以 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 npm run tauri -- dev --no-watch` 启动应用。
-- `npm run build`：生产构建通过；JS 805.43 kB（gzip 251.47 kB），Vite 提示超过 500 kB 建议拆包。
-- `cargo test --manifest-path src-tauri/Cargo.toml`：6 个 Rust 单元测试连续两次通过（含监听过滤与真实文件变更通知）；测试临时目录加入进程内计数，消除并行碰撞。
-- `npx tauri build --debug --no-bundle`：原生 debug 二进制构建成功（`src-tauri/target/debug/y-note.exe`）；已在真实窗口完成端到端验收。
+- `npm run test:e2e`：7 条 Playwright 测试通过（本机 Edge 1440×900）。
+- `npm run test:native`：Windows/WebView2 原生窗口 55 项通过；需先以 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 npm run tauri -- dev --no-watch` 启动应用。
+- `npm run test:native:draft:prepare` / `verify`：强制退出草稿恢复 12 项通过（两次运行之间需按 PID 结束并重启应用）。
+- `npm run build`：生产构建通过；JS 805.57 kB（gzip 251.53 kB），Vite 提示超过 500 kB 建议拆包。
+- `cargo test --manifest-path src-tauri/Cargo.toml`：6 个 Rust 单元测试通过（含监听过滤与真实文件变更通知）。
+- `npx tauri build --debug --no-bundle`：原生 debug 二进制构建成功（`src-tauri/target/debug/y-note.exe`）。
 
 ### 退出条件
 
 - [x] 用户可以打开真实 `.md`，进行所见即所得编辑并保存，再被其他 Markdown 工具正常读取。
-  - 已在真实 Tauri 窗口用 Tauri IPC 打开真实 `.md`，Tiptap 编辑、Ctrl/Cmd+S 保存，并用 Node 外部读取与 SHA 校验；原生文件选择框未自动化。
-- [ ] 单点修改的 Git Diff 只包含真实变化及必要的结构影响。
-  - 当前“源码改动”面板是打开时基线与当前缓冲的行级预览，不读取 Git 仓库，未验证 Git Diff。
-- [ ] 默认闲置和草稿恢复不会改变 Git 工作区。
-  - 草稿在浏览器写入 localStorage、在 Tauri 写入应用数据目录 `drafts/`，不写入文档仓库；应用层测试已验证草稿恢复后磁盘字节不变，原生恢复流程未做端到端验证。
-- [ ] 写入失败不会破坏原文件，异常退出后可以恢复草稿。
-  - 原生窗口已验证只读文件保存失败且原字节不变；Rust 原子写入与冲突拒绝有单元测试；断电/强杀后的草稿恢复演练未做。
+  - 原生文件选择框与 Tauri IPC 均打开真实 `.md`，Tiptap 编辑、Ctrl/Cmd+S 保存，并用 Node 外部读取与 SHA 校验；原生验收 55 项通过。
+- [x] 单点修改的 Git Diff 只包含真实变化及必要的结构影响。
+  - 在临时 Git 仓库中单点编辑后仅目标文件变更，`git diff --unified=0` 只有一个 hunk、一行删除和一行新增。
+- [x] 默认闲置和草稿恢复不会改变 Git 工作区。
+  - 原生验收与强制退出恢复验收均确认：闲置、草稿保存、恢复草稿阶段 Git 工作区保持干净；草稿只写应用数据目录。
+- [x] 写入失败不会破坏原文件，异常退出后可以恢复草稿。
+  - 只读文件保存失败且原字节不变；强制结束进程后重启，12 项草稿恢复验收通过，保存后 Git Diff 只有一行增删。
 - [x] 外部修改冲突不会被静默覆盖。
   - 原生窗口已实测 watcher 外部修改、冲突拒绝、重新载入与保留本地；删除文件后保存不重建，保留本地可重建；Rust 冲突拒绝测试与浏览器 E2E 同时通过。
-- [ ] 中文 IME composition 期间无丢字、跳选区或错误映射。
-  - 尚未进行真实的 IME 组合输入测试。
+- [x] 中文 IME composition 期间无丢字、跳选区或错误映射。
+  - 在真实 WebView2 中通过 CDP composition 提交中文，无丢字、选区在末尾、映射问题为 0；真实系统输入法候选窗交互未自动化。
 - [x] 主编辑流程端到端测试通过。
-  - 浏览器 3 条 E2E、7 条应用层集成测试与 Windows 原生窗口 27 项验收均通过；原生流程覆盖打开、无操作保存、编辑保存、外部修改、重新载入、冲突、保留本地、删除重建、BOM/CRLF 与只读失败。原生文件选择框、撤销/重做交互与真实 IME 仍不在本轮自动化范围内。
+  - 7 条浏览器 E2E、7 条应用层集成测试、Windows 原生窗口 55 项验收与强制退出草稿恢复 12 项验收均通过；覆盖打开、编辑、保存、撤销/重做、回滚、文件树、最近文件、外部修改、冲突与草稿恢复。表格结构编辑与图片插入仍属已知限制。
 
 ### 已知限制
 
-- 浏览器预览使用内存磁盘与 localStorage，不能代表真实文件系统、权限和 Tauri 行为；原生核心流程已验收，但原生文件选择框未自动化点选。
+- 浏览器预览使用内存磁盘与 localStorage，不能代表真实文件系统、权限和 Tauri 行为；核心流程已在 Windows 原生窗口验收，macOS/Linux 尚未验证。
 - 外部修改检测使用原生 `notify` watcher，监听当前文档所在目录并在 150 ms 防抖后校验 SHA；保存前 SHA 校验仍为兜底。Windows 实机已验证原子替换、删除与外部编辑，网络盘、特殊文件系统和其他平台待验证。
-- 中文 IME、撤销/重做、拖放和键盘无障碍尚未做专项验证。
-- 表格节点可以渲染，但工具栏暂不提供表格结构编辑；图片扩展已注册但无插入入口；歧义表格仍整块降级。
+- 中文 IME 通过 Chromium composition 协议模拟验证；真实系统输入法（如微软拼音）的候选窗与组词交互尚未专项人工验收。
+- 原生文件夹选择对话框未纳入自动化；工作区树读取、展开子目录与打开文件已通过原生 IPC 和 UI 验证。
+- 撤销/重做历史在打开新文档、重新载入、恢复草稿或切换源码/视觉视图时重置；不跨文档或跨模式保留。拖放和键盘无障碍尚未专项验证。
+- 表格节点可以渲染；表格结构编辑与图片插入仍只在源码模式处理，歧义表格整块降级。
 - 跨块重组、列表标记宽度变化、Setext 标题层级变化等结构操作会回滚并提示，需要切到源码视图完成。
 - 空段落（回车产生、尚无 sourceId）属于临时编辑态；在其中输入文字后才会写入源码，单独存在的空段落不会保存。
 - 源码视图是纯文本 textarea，无语法高亮；无法映射的原始块通过源码模式编辑。
-- “源码改动”面板是基线—当前缓冲的本地行级差异预览，不是 M2 的真实 Git Diff。
+- “源码改动”面板是基线—当前缓冲的本地行级差异预览，不是 M2 的真实 Git Diff；M1 的 Git 契约已在外部临时仓库中验证。
 - 设置与快捷键按钮目前只显示提示；暂无自动保存、多标签页和命令面板。
 - 长文档性能未测量；生产构建存在 500 kB chunk 警告。
 - Tauri CSP 仍为 `null`，capability 仅包含默认核心权限与 dialog；发布前需完成安全收紧。
@@ -286,15 +317,14 @@ npm run test:native                                  # Windows 原生窗口 27 �
 
 ## 8. 下一步行动
 
-M0 已完成；M1 的原生打开/保存、文件监听与冲突处置已验收，剩余工作集中在 IME、恢复演练、文件选择框与平台验证：
+M0、M1 已完成（Windows）。下一阶段进入 M2，同时保留已披露限制的后续验证：
 
-1. 原生打开/保存已通过 27 项验收；补一次原生文件选择框的人工点选记录（或 UI 自动化），并在 macOS/Linux 重跑同一验收。
-2. 做中文 IME 组合输入专项测试，记录 composition 期间的选区与源码映射行为。
-3. Windows watcher 已实测原子替换、删除和外部编辑；继续验证网络盘、特殊文件系统与 macOS/Linux 的事件行为。
-4. 验证草稿在强制退出后的恢复流程，确认草稿只写应用数据目录。
-5. 浏览器 E2E、应用层集成测试与原生窗口验收已覆盖主流程；继续专项验证撤销/重做与桥接回滚的交互。
-6. 补齐表格结构编辑、图片插入，或明确保持源码模式降级；继续观察歧义表格与 Setext 标题的真实需求。
-7. M1 剩余门槛通过后进入 M2：只读 Git Diff、Worker 源索引、长文档性能预算与三平台实测；随后处理 M3 的设置、无障碍、CSP 收紧与安装包。
+1. M2：实现只读 Git 状态与真实 Diff 面板、Worker 源索引、长文档性能预算与三平台压力测试。
+2. 在 macOS/Linux 重跑原生验收脚本与长文档测试；当前 55 项原生验收仅覆盖 Windows。
+3. 用真实系统输入法（如微软拼音）人工验收候选窗、组词与选区；现有 IME 验收使用 Chromium composition 协议。
+4. 按需补齐表格结构编辑与图片插入；当前仅单元格文字与源码模式可用。
+5. 验证网络盘、特殊文件系统上的 watcher 事件行为。
+6. M2 通过后进入 M3：设置、无障碍、CSP 收紧、三平台安装包与发布检查。
 
 ## 9. 当前主要风险
 
@@ -307,13 +337,23 @@ M0 已完成；M1 的原生打开/保存、文件监听与冲突处置已验收�
 | Windows 与 Unix 原子替换语义不同 | Node 与 Rust 实现均有单元测试；发布前仍需三平台故障注入并确认权限保留 |
 | 投影 JSON 与真实 Tiptap schema/扩展不一致 | 已接入真实 schema 与桥接回滚；继续补事务级 golden tests，不允许直接信任投影文本 |
 | 长文档虚拟化破坏编辑器语义 | 只卸载昂贵视觉效果，保留完整 PM 文档和焦点附近节点 |
-| 浏览器预览与 Tauri 原生行为差异 | Windows 原生核心流程已验收；继续覆盖原生文件选择框、IME 与三平台 |
+| 浏览器预览与 Tauri 原生行为差异 | Windows 原生核心流程与文件选择框已验收；继续覆盖真实系统输入法与 macOS/Linux |
 | 原生 watcher 在原子替换、网络盘或特殊文件系统上的事件差异 | Windows 实机已验证原子替换、删除与外部编辑；继续验证网络盘、特殊文件系统与三平台 |
 | UI 与 SourceBuffer 世代不同步导致编辑器保留旧内容 | 已改为全局单调 epoch 并加入应用层与浏览器 E2E 回归断言；继续关注重新载入/切换路径 |
-| 中文 IME 组合输入与增量映射冲突 | 把 IME 专项测试列为 M1 退出条件，未通过前不宣称可用 |
+| 撤销历史跨文档污染或重投影清空重做栈 | 每次文档加载使用独立 loadId 重建编辑器；内容已一致时跳过 setContent；已加入跨文档与撤销/重做回归测试 |
+| 中文 IME 组合输入与增量映射冲突 | Chromium composition 验收通过；继续用真实系统输入法人工验收候选窗交互 |
 | 结构编辑回滚造成用户困惑 | 回滚时明确提示并引导源码视图；逐步补齐高频结构操作 |
 
 ## 10. 更新记录
+
+### 2026-11-01
+
+- 完成 M1 剩余验收：原生文件选择框（Win32 自动化）、Git 工作区与单点 Diff、中文 IME composition、撤销/重做、跨文档历史、结构回滚、工作区树与最近文件；Windows 原生验收 55 项通过。
+- 强制退出草稿恢复：prepare/verify 两阶段 12 项通过，确认草稿只写应用数据目录；恢复后保存的 Git Diff 只有一行增删。
+- 修复重投影清空重做栈：编辑器内容与投影一致时跳过 `setContent`；修复跨文档撤销污染：每次文档加载引入 `loadId` 并重建编辑器。
+- 新增 `scripts/select-open-file.ps1`、`scripts/close-open-dialogs.ps1`、`scripts/native-acceptance.mjs`、`scripts/native-draft-recovery.mjs` 及对应 npm 脚本。
+- `npm run check`（187）、`npm run test:e2e`（7）、`npm run test:native`（55）、草稿恢复（12）、`cargo test`（6）、`npm run build` 与 `tauri build --debug --no-bundle` 全部通过。
+- 按退出条件标记 M1 完成（Windows）。表格结构编辑、图片插入、真实系统输入法候选窗与 macOS/Linux 验收作为已披露限制保留。
 
 ### 2026-10-31
 
@@ -333,7 +373,7 @@ M0 已完成；M1 的原生打开/保存、文件监听与冲突处置已验收�
 - 新增 Rust `notify` 文件监听（监听文档所在目录、过滤临时文件与访问事件、150 ms 前端防抖），以 Tauri 事件驱动外部修改状态；移除前端 3 秒轮询。
 - 冲突提示新增“保留本地”，通过显式确认后用当前缓冲区覆盖磁盘；写入仍使用 SHA 前置校验和原子替换，并新增“重新载入”。
 - 新增 `tests/app-store.test.ts`（应用层集成测试）和 Playwright 浏览器 E2E（3 条，使用本机 Edge），测试总数达到 8 个文件。
-- 新增 `scripts/native-acceptance.mjs` 与 `npm run test:native`：通过 WebView2 CDP 驱动真实 Tauri 窗口，使用真实临时文件完成 27 项验收，覆盖打开、无操作保存、编辑保存、BOM/CRLF/无末尾换行、只读失败、watcher、重新载入、冲突、保留本地和删除重建。
+- 新增 `scripts/native-acceptance.mjs` 与 `npm run test:native`：通过 WebView2 CDP 驱动真实 Tauri 窗口，使用真实临时文件完成初始 27 项验收（后续扩展到 55 项），覆盖打开、无操作保存、编辑保存、BOM/CRLF/无末尾换行、只读失败、watcher、重新载入、冲突、保留本地和删除重建。
 - 原生验收发现重新载入时 epoch 碰撞导致编辑器保留旧内容；改为全局单调 epoch，新增应用层回归测试并把浏览器 E2E 断言扩展到编辑器 DOM，测试总数达到 187 个。
 - 修复 Rust 测试临时目录仅按纳秒命名的并行碰撞（加入进程内原子计数），`cargo test` 连续两次 6 项通过。
-- 明确 M1 剩余门槛：原生文件选择框点选、中文 IME、草稿强制退出恢复演练、撤销/重做与桥接回滚交互，以及 watcher 在三平台/网络盘的行为。
+- 明确 M1 剩余门槛：原生文件选择框点选、中文 IME、草稿强制退出恢复演练、撤销/重做与桥接回滚交互，以及 watcher 在三平台/网络盘的行为（已于 2026-11-01 完成 Windows 部分）。
