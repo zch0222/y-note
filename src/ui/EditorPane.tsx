@@ -12,7 +12,7 @@ export function EditorPane() {
 
   if (!doc) {
     return (
-      <main className="editor-pane editor-empty" id="editor-pane">
+      <main className="editor-pane editor-empty" id="editor-pane" tabIndex={-1} aria-label="编辑区">
         <Welcome />
       </main>
     )
@@ -24,6 +24,8 @@ export function EditorPane() {
     <main
       className={`editor-pane${sourceMode ? ' source-mode' : ''}`}
       id="editor-pane"
+      tabIndex={-1}
+      aria-label="编辑区"
     >
       <DocumentHeader doc={doc} />
       <Toolbar doc={doc} />

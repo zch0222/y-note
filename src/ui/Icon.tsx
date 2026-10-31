@@ -125,11 +125,24 @@ const shapes = {
   ),
   minus: <path d="M5 12h14" />,
   square: <rect x="6" y="6" width="12" height="12" rx="1" />,
+  restore: (
+    <>
+      <rect x="5" y="8" width="11" height="11" rx="1" />
+      <path d="M9 8V5h10v11h-3" />
+    </>
+  ),
   x: <path d="m6 6 12 12M18 6 6 18" />,
   save: (
     <>
       <path d="M5 3h11l3 3v15H5Z" />
       <path d="M8 3v5h7V3M8 21v-7h8v7" />
+    </>
+  ),
+  printer: (
+    <>
+      <path d="M7 8V3h10v5" />
+      <rect x="3" y="8" width="18" height="8" rx="2" />
+      <path d="M7 14h10v7H7Z" />
     </>
   ),
   warning: (

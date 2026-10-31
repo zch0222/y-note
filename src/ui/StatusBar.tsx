@@ -1,5 +1,6 @@
 import { useAppStore } from '../state/useStore.js'
 import { Icon } from './Icon.js'
+import { shortcutText } from './shortcuts.js'
 
 export function StatusBar() {
   const store = useAppStore()
@@ -36,10 +37,13 @@ export function StatusBar() {
             </span>
           </>
         ) : (
-          <span className="status-item">Ctrl/Cmd + O 打开文件 · Ctrl/Cmd + S 保存</span>
+          <span className="status-item">
+            {shortcutText(store.platform, 'Mod+O')} 打开文件 ·{' '}
+            {shortcutText(store.platform, 'Mod+K')} 命令面板
+          </span>
         )}
       </div>
-      <div className="status-right">
+      <div className="status-right" aria-live="polite">
         {doc ? (
           <span className="status-item">
             <span className={`status-dot ${doc.saveState}`} />

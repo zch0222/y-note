@@ -86,4 +86,8 @@ export interface DocumentGateway {
   watchDocument?(path: string, onChanged: () => void): Promise<() => void | Promise<void>>
   /** Registers an already-opened document, used by browser-only demo buffers. */
   registerDocument?(document: OpenedDocument): Promise<void>
+  /** Opens an http/https/mailto URL outside the application. */
+  openExternal?(url: string): Promise<void>
+  /** Debug builds only: authorizes a directory for automated native acceptance. */
+  authorizeTestRoot?(root: string): Promise<void>
 }

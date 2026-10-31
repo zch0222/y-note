@@ -1,6 +1,7 @@
 import { DEMO_SOURCE } from '../demo.js'
 import { useAppStore } from '../state/useStore.js'
 import { Icon } from './Icon.js'
+import { shortcutText } from './shortcuts.js'
 
 export function Welcome() {
   const store = useAppStore()
@@ -80,7 +81,10 @@ export function Welcome() {
         ) : null}
         <p className="welcome-note">
           {store.gateway.kind === 'tauri'
-            ? '所有内容仅保存在本机。按 Ctrl/Cmd + O 打开文件，Ctrl/Cmd + S 保存。'
+            ? `所有内容仅保存在本机。按 ${shortcutText(store.platform, 'Mod+O')} 打开文件，${shortcutText(
+                store.platform,
+                'Mod+K',
+              )} 打开命令面板。`
             : '当前是浏览器预览：文件保存在内存中，不会写回本地磁盘。桌面版提供原子写入与磁盘冲突保护。'}
         </p>
       </div>

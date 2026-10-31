@@ -219,14 +219,16 @@ describe('AppStore document workflow', () => {
     await advanceWatch()
     expect(store.doc?.external).toBe('conflict')
 
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    await store.keepLocalConflict()
-    expect(confirm).toHaveBeenCalled()
+    const cancelled = store.keepLocalConflict()
+    expect(store.confirmRequest?.title).toBe('保留我的草稿？')
+    store.resolveConfirm(false)
+    await cancelled
     expect(decode(gateway.files.get(PATH))).toBe('# Note\n\nexternal\n')
     expect(store.doc?.external).toBe('conflict')
 
-    confirm.mockReturnValue(true)
-    await store.keepLocalConflict()
+    const accepted = store.keepLocalConflict()
+    store.resolveConfirm(true)
+    await accepted
     expect(decode(gateway.files.get(PATH))).toBe('# Note\n\nlocal\n')
     expect(store.doc?.external).toBe('none')
     expect(store.doc?.dirty).toBe(false)
@@ -241,8 +243,9 @@ describe('AppStore document workflow', () => {
     await advanceWatch()
     expect(store.doc?.external).toBe('conflict')
 
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    await store.keepLocalConflict()
+    const accepted = store.keepLocalConflict()
+    store.resolveConfirm(true)
+    await accepted
 
     expect(decode(gateway.files.get(PATH))).toBe('# Note\n\nlocal\n')
     expect(store.doc?.external).toBe('none')

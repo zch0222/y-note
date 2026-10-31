@@ -31,6 +31,15 @@ export function DocumentHeader({ doc }: { doc: DocState }) {
         <button
           className="icon-button"
           type="button"
+          title="打印 / 导出 PDF（不写回源文件）"
+          aria-label="打印或导出 PDF"
+          onClick={() => void store.printDocument()}
+        >
+          <Icon name="printer" size="small" />
+        </button>
+        <button
+          className="icon-button"
+          type="button"
           title="重新载入磁盘内容"
           aria-label="重新载入"
           onClick={() => void store.reloadFromDisk()}

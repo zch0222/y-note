@@ -38,18 +38,42 @@ export function Inspector() {
       data-panel={store.inspectorTab}
       aria-label="上下文面板"
     >
-      <div className="inspector-tabs">
+      <div className="inspector-tabs" role="tablist" aria-label="上下文面板视图">
         <button
+          id="inspector-tab-outline"
           className={`inspector-tab${store.inspectorTab === 'outline' ? ' active' : ''}`}
           type="button"
+          role="tab"
+          aria-selected={store.inspectorTab === 'outline'}
+          aria-controls="inspector-panel-outline"
+          tabIndex={store.inspectorTab === 'outline' ? 0 : -1}
           onClick={() => store.setInspectorTab('outline')}
+          onKeyDown={event => {
+            if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+              event.preventDefault()
+              store.setInspectorTab('diff')
+              document.getElementById('inspector-tab-diff')?.focus()
+            }
+          }}
         >
           大纲
         </button>
         <button
+          id="inspector-tab-diff"
           className={`inspector-tab${store.inspectorTab === 'diff' ? ' active' : ''}`}
           type="button"
+          role="tab"
+          aria-selected={store.inspectorTab === 'diff'}
+          aria-controls="inspector-panel-diff"
+          tabIndex={store.inspectorTab === 'diff' ? 0 : -1}
           onClick={() => store.setInspectorTab('diff')}
+          onKeyDown={event => {
+            if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+              event.preventDefault()
+              store.setInspectorTab('outline')
+              document.getElementById('inspector-tab-outline')?.focus()
+            }
+          }}
         >
           改动
         </button>
@@ -114,7 +138,12 @@ function InspectorDocument({ doc }: { doc: DocState }) {
 
   return (
     <div className="inspector-scroll">
-      <div className="outline-panel">
+      <div
+        className="outline-panel"
+        id="inspector-panel-outline"
+        role="tabpanel"
+        aria-labelledby="inspector-tab-outline"
+      >
         <section className="panel-section">
           <div className="panel-heading">
             <span>文档大纲</span>
@@ -234,7 +263,12 @@ function InspectorDocument({ doc }: { doc: DocState }) {
         </div>
       </div>
 
-      <div className="diff-panel">
+      <div
+        className="diff-panel"
+        id="inspector-panel-diff"
+        role="tabpanel"
+        aria-labelledby="inspector-tab-diff"
+      >
         <div className="diff-source-switch" role="tablist" aria-label="差异来源">
           <button
             type="button"

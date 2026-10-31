@@ -2,8 +2,10 @@ import type { Editor } from '@tiptap/core'
 import type { JSONContent } from '@tiptap/core'
 
 import { EditorBridge, type SelectionHint } from '../editor/bridge.js'
+import { renderPrintHtml } from '../editor/print.js'
 import { collectOutline, countWords, toTiptapDocument } from '../editor/project.js'
 import type { OutlineItem } from '../editor/project.js'
+import { isExternalUrlAllowed } from '../platform/external.js'
 import type { BlockAnalysis, DiffPreview } from '../source/analysis.js'
 import { openEnvelope } from '../source/Envelope.js'
 import { decodeSource, sha256 } from '../source/encoding.js'
@@ -27,6 +29,10 @@ export type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
 export type ExternalState = 'none' | 'external-change' | 'conflict'
 export type EditorMode = 'visual' | 'source'
 export type Theme = 'light' | 'dark'
+export type ThemePreference = Theme | 'system'
+export type MotionPreference = 'system' | 'reduced'
+export type Platform = 'windows' | 'macos' | 'linux'
+export type Overlay = 'command' | 'settings' | 'shortcuts' | null
 export type InspectorTab = 'outline' | 'diff'
 export type DiffSource = 'git' | 'local'
 
@@ -73,10 +79,36 @@ interface Toast {
   message: string
 }
 
+export interface ConfirmRequest {
+  id: number
+  title: string
+  message: string
+  confirmLabel: string
+  cancelLabel: string
+  danger?: boolean
+  resolve: (value: boolean) => void
+}
+
 const RECENT_KEY = 'ynote.recent'
 const THEME_KEY = 'ynote.theme'
+const MOTION_KEY = 'ynote.motion'
 const WORKSPACE_KEY = 'ynote.workspace'
 const PANEL_KEY = 'ynote.panel'
+const SIDEBAR_KEY = 'ynote.sidebar'
+
+function detectPlatform(): Platform {
+  if (typeof navigator === 'undefined') {
+    return 'windows'
+  }
+  const agent = navigator.userAgent
+  if (/Mac|iPhone|iPad/i.test(agent)) {
+    return 'macos'
+  }
+  if (/Linux/i.test(agent)) {
+    return 'linux'
+  }
+  return 'windows'
+}
 
 function basename(path: string): string {
   const parts = path.split(/[\\/]/)
@@ -104,6 +136,7 @@ export class AppStore {
   private disposed = false
 
   readonly gateway: DocumentGateway
+  readonly platform: Platform
   doc: DocState | null = null
   editor: Editor | null = null
   bridge: EditorBridge | null = null
@@ -111,11 +144,17 @@ export class AppStore {
   workspaceError: string | null = null
   recent: RecentFile[] = []
   theme: Theme = 'light'
+  themePreference: ThemePreference = 'system'
+  motionPreference: MotionPreference = 'system'
   mode: EditorMode = 'visual'
   inspectorTab: InspectorTab = 'outline'
   diffSource: DiffSource = 'git'
   panelOpen = true
+  sidebarOpen = true
   sidebarFilter = ''
+  overlay: Overlay = null
+  confirmRequest: ConfirmRequest | null = null
+  printHtml: string | null = null
   toast: Toast | null = null
   initialized = false
   git: GitDiff | null = null
@@ -141,15 +180,27 @@ export class AppStore {
   private watchDispose: (() => void | Promise<void>) | null = null
   private watchTimer: ReturnType<typeof setTimeout> | null = null
   private watchBusy = false
+  private themeMedia: MediaQueryList | null = null
 
   constructor(gateway: DocumentGateway) {
     this.gateway = gateway
+    this.platform = detectPlatform()
     this.recent = safeRead<RecentFile[]>(RECENT_KEY, [])
     const storedTheme = localStorage.getItem(THEME_KEY)
-    this.theme = storedTheme === 'dark' ? 'dark' : 'light'
+    this.themePreference =
+      storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : 'system'
     const storedPanel = localStorage.getItem(PANEL_KEY)
     this.panelOpen = storedPanel !== 'closed'
-    document.documentElement.dataset.theme = this.theme
+    this.sidebarOpen = localStorage.getItem(SIDEBAR_KEY) !== 'closed'
+    this.motionPreference = localStorage.getItem(MOTION_KEY) === 'reduced' ? 'reduced' : 'system'
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      this.themeMedia = window.matchMedia('(prefers-color-scheme: dark)')
+      this.themeMedia.addEventListener('change', this.handleSystemTheme)
+    }
+    document.documentElement.dataset.platform = this.platform
+    document.documentElement.dataset.runtime = gateway.kind
+    this.applyTheme()
+    this.applyMotion()
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -260,9 +311,13 @@ export class AppStore {
   async openOpened(opened: OpenedDocument): Promise<void> {
     if (this.doc?.dirty) {
       await this.flushDraft()
-      const proceed = window.confirm(
-        '当前文档有未保存的修改。继续打开其他文件？草稿已保留，可在重新打开时恢复。',
-      )
+      const proceed = await this.askConfirm({
+        title: '打开其他文件？',
+        message:
+          '当前文档有未保存的修改。继续打开其他文件？草稿已保留，可在重新打开时恢复。',
+        confirmLabel: '继续打开',
+        cancelLabel: '留在当前文档',
+      })
       if (!proceed) {
         return
       }
@@ -356,15 +411,64 @@ export class AppStore {
     }
   }
 
-  setTheme(theme: Theme): void {
-    this.theme = theme
-    document.documentElement.dataset.theme = theme
-    localStorage.setItem(THEME_KEY, theme)
+  setThemePreference(preference: ThemePreference): void {
+    this.themePreference = preference
+    localStorage.setItem(THEME_KEY, preference)
+    this.applyTheme()
     this.emit()
   }
 
+  setTheme(theme: Theme): void {
+    this.setThemePreference(theme)
+  }
+
   toggleTheme(): void {
-    this.setTheme(this.theme === 'light' ? 'dark' : 'light')
+    this.setThemePreference(this.theme === 'light' ? 'dark' : 'light')
+  }
+
+  setMotionPreference(preference: MotionPreference): void {
+    this.motionPreference = preference
+    localStorage.setItem(MOTION_KEY, preference)
+    this.applyMotion()
+    this.emit()
+  }
+
+  private applyTheme(): void {
+    const systemDark = this.themeMedia?.matches ?? false
+    this.theme =
+      this.themePreference === 'system'
+        ? systemDark
+          ? 'dark'
+          : 'light'
+        : this.themePreference
+    document.documentElement.dataset.theme = this.theme
+  }
+
+  private applyMotion(): void {
+    document.documentElement.dataset.motion = this.motionPreference
+  }
+
+  private handleSystemTheme = (): void => {
+    if (this.themePreference !== 'system') {
+      return
+    }
+    this.applyTheme()
+    this.emit()
+  }
+
+  focusEditor(): void {
+    if (this.mode === 'visual' && this.editor) {
+      this.editor.commands.focus()
+      return
+    }
+    const source = document.querySelector<HTMLTextAreaElement>('[data-testid="source-editor"]')
+    if (source) {
+      source.focus()
+      return
+    }
+    if (this.mode === 'visual' && this.doc?.readOnly) {
+      document.getElementById('editor-pane')?.focus()
+    }
   }
 
   setMode(mode: EditorMode): void {
@@ -608,6 +712,93 @@ export class AppStore {
     this.emit()
   }
 
+  toggleSidebar(): void {
+    this.sidebarOpen = !this.sidebarOpen
+    localStorage.setItem(SIDEBAR_KEY, this.sidebarOpen ? 'open' : 'closed')
+    this.emit()
+  }
+
+  openOverlay(overlay: Exclude<Overlay, null>): void {
+    this.overlay = overlay
+    this.emit()
+  }
+
+  askConfirm(
+    options: Omit<ConfirmRequest, 'id' | 'resolve'>,
+  ): Promise<boolean> {
+    if (this.confirmRequest) {
+      this.confirmRequest.resolve(false)
+    }
+    return new Promise(resolve => {
+      this.confirmRequest = { ...options, id: Date.now(), resolve }
+      this.emit()
+    })
+  }
+
+  resolveConfirm(value: boolean): void {
+    const request = this.confirmRequest
+    if (!request) {
+      return
+    }
+    this.confirmRequest = null
+    this.emit()
+    request.resolve(value)
+  }
+
+  closeOverlay(): void {
+    if (!this.overlay) {
+      return
+    }
+    this.overlay = null
+    this.emit()
+  }
+
+  async openExternal(url: string): Promise<void> {
+    if (!isExternalUrlAllowed(url)) {
+      this.notify('只允许打开 http、https 或 mailto 链接。')
+      return
+    }
+    if (!this.gateway.openExternal) {
+      this.notify('当前环境不支持打开外部链接。')
+      return
+    }
+    try {
+      await this.gateway.openExternal(url)
+    } catch (error) {
+      this.notify(`无法打开外部链接：${(error as Error).message ?? String(error)}`)
+    }
+  }
+
+  async printDocument(): Promise<void> {
+    const doc = this.doc
+    if (!doc) {
+      return
+    }
+    if (this.printHtml !== null) {
+      return
+    }
+    // The fast input path intentionally skips full Tiptap serialization, so the
+    // source buffer (not doc.tiptap) is the authoritative print input.
+    this.printHtml = renderPrintHtml(toTiptapDocument(projectDocument(doc.buffer.map)))
+    this.emit()
+    const nextFrame = () =>
+      new Promise<void>(resolve => {
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(() => resolve())
+        } else {
+          setTimeout(resolve, 0)
+        }
+      })
+    try {
+      await nextFrame()
+      await nextFrame()
+      window.print()
+    } finally {
+      this.printHtml = null
+      this.emit()
+    }
+  }
+
   setSidebarFilter(value: string): void {
     this.sidebarFilter = value
     this.emit()
@@ -768,7 +959,14 @@ export class AppStore {
     if (!doc || doc.readOnly || !doc.dirty || doc.external !== 'conflict') {
       return
     }
-    if (!window.confirm('将用当前本地内容覆盖磁盘上的外部修改，此操作无法撤销。继续？')) {
+    const proceed = await this.askConfirm({
+      title: '保留我的草稿？',
+      message: '将用当前本地内容覆盖磁盘上的外部修改，此操作无法撤销。',
+      confirmLabel: '覆盖磁盘',
+      cancelLabel: '取消',
+      danger: true,
+    })
+    if (!proceed) {
       return
     }
 

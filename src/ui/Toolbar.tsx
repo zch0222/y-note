@@ -1,11 +1,13 @@
 import type { Editor } from '@tiptap/core'
 import { useEditorState } from '@tiptap/react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import type { MarkName } from '../editor/bridge.js'
 import type { DocState } from '../state/store.js'
 import { useAppStore } from '../state/useStore.js'
 import { Icon } from './Icon.js'
+import { LinkDialog } from './LinkDialog.js'
+import { shortcutText } from './shortcuts.js'
 
 interface ActiveState {
   bold: boolean
@@ -103,26 +105,10 @@ function setBlock(editor: Editor | null, store: ReturnType<typeof useAppStore>, 
   }
 }
 
-function setLink(editor: Editor | null) {
-  if (!editor) {
-    return
-  }
-  const current = String(editor.getAttributes('link').href ?? '')
-  const href = window.prompt('链接地址（留空移除链接）', current || 'https://')
-  if (href === null) {
-    return
-  }
-  const trimmed = href.trim()
-  if (trimmed === '') {
-    editor.chain().focus().extendMarkRange('link').unsetLink().run()
-    return
-  }
-  editor.chain().focus().extendMarkRange('link').setLink({ href: trimmed }).run()
-}
-
 export function Toolbar({ doc }: { doc: DocState }) {
   const store = useAppStore()
   const editor = store.editor
+  const [linkOpen, setLinkOpen] = useState(false)
   const readOnly = Boolean(doc.readOnly)
   const locked = !editor || readOnly
 
@@ -151,7 +137,7 @@ export function Toolbar({ doc }: { doc: DocState }) {
     }) ?? INACTIVE
 
   return (
-    <div className="format-toolbar" aria-label="格式工具栏">
+    <div className="format-toolbar" role="toolbar" aria-label="格式工具栏">
       <label className="block-select-wrap" title="段落样式">
         <select
           className="block-select"
@@ -188,7 +174,7 @@ export function Toolbar({ doc }: { doc: DocState }) {
       </ToolButton>
       <ToolButton
         title="删除线 (Ctrl/Cmd + Shift + X)"
-        className="strike"
+        className="strike secondary"
         active={active.strike}
         disabled={locked}
         onClick={() => runMark(editor, store, 'strike')}
@@ -197,14 +183,16 @@ export function Toolbar({ doc }: { doc: DocState }) {
       </ToolButton>
       <ToolButton
         title="链接"
+        className="secondary"
         active={active.link}
         disabled={locked}
-        onClick={() => setLink(editor)}
+        onClick={() => setLinkOpen(true)}
       >
         <Icon name="link" size="small" />
       </ToolButton>
       <ToolButton
         title="行内代码 (Ctrl/Cmd + E)"
+        className="secondary"
         active={active.code}
         disabled={locked}
         onClick={() => runMark(editor, store, 'code')}
@@ -222,6 +210,7 @@ export function Toolbar({ doc }: { doc: DocState }) {
       </ToolButton>
       <ToolButton
         title="有序列表"
+        className="secondary"
         active={active.orderedList}
         disabled={locked}
         onClick={() => editor?.chain().focus().toggleOrderedList().run()}
@@ -238,23 +227,25 @@ export function Toolbar({ doc }: { doc: DocState }) {
       </ToolButton>
       <ToolButton
         title="代码块"
+        className="secondary"
         active={active.codeBlock}
         disabled={locked}
         onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
       >
         <Icon name="code" size="small" />
       </ToolButton>
-      <ToolButton title="表格结构编辑将在后续里程碑提供" disabled>
+      <ToolButton title="表格结构编辑将在后续里程碑提供" className="secondary" disabled>
         <Icon name="table" size="small" />
       </ToolButton>
-      <ToolButton title="图片插入将在后续里程碑提供" disabled>
+      <ToolButton title="图片插入将在后续里程碑提供" className="secondary" disabled>
         <Icon name="image" size="small" />
       </ToolButton>
       <div className="toolbar-spacer" />
-      <div className="mode-switch" aria-label="编辑模式">
+      <div className="mode-switch" role="group" aria-label="编辑模式">
         <button
           type="button"
           className={store.mode === 'visual' ? 'active' : ''}
+          aria-pressed={store.mode === 'visual'}
           disabled={readOnly}
           title={readOnly ? '只读文档不能切换到编辑视图' : '所见即所得'}
           onClick={() => store.setMode('visual')}
@@ -264,12 +255,16 @@ export function Toolbar({ doc }: { doc: DocState }) {
         <button
           type="button"
           className={store.mode === 'source' ? 'active' : ''}
-          title="源码（Ctrl/Cmd + Shift + E）"
+          aria-pressed={store.mode === 'source'}
+          title={`源码（${shortcutText(store.platform, 'Mod+Shift+E')}）`}
           onClick={() => store.setMode('source')}
         >
           源码
         </button>
       </div>
+      {linkOpen && editor ? (
+        <LinkDialog editor={editor} onClose={() => setLinkOpen(false)} />
+      ) : null}
     </div>
   )
 }

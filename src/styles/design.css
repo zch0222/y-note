@@ -1,25 +1,29 @@
 :root {
       color-scheme: light;
-      --accent: #635bff;
+      /* Text pairs are checked against paper/sidebar/panel/workbench in tests. */
+      --accent: #5a52f0;
+      --on-accent: #ffffff;
       --accent-soft: #efefff;
       --accent-faint: #f7f6ff;
       --text: #24252a;
       --text-soft: #565a64;
-      --muted: #858994;
-      --faint: #aaaeb8;
+      --muted: #676b76;
+      --faint: #6b707c;
       --workbench: #f4f5f7;
       --sidebar: #f7f7f9;
       --paper: #ffffff;
       --panel: #fbfbfc;
       --line: #e8e9ed;
       --line-strong: #dfe1e7;
+      --control-border: #868a96;
       --hover: #ececf1;
       --selection: #e9e8ff;
-      --green: #27836d;
+      --green: #1f7560;
+      --on-green: #ffffff;
       --green-soft: #eaf6f1;
-      --amber: #ae7226;
+      --amber: #8c5a16;
       --amber-soft: #fff5e6;
-      --red: #c34b55;
+      --red: #b23a45;
       --red-soft: #fff0f1;
       --code-bg: #23242b;
       --code-text: #e6e6ee;
@@ -29,21 +33,24 @@
     [data-theme="dark"] {
       color-scheme: dark;
       --accent: #9a94ff;
+      --on-accent: #17151f;
       --accent-soft: #302d51;
       --accent-faint: #252333;
       --text: #e8e8ec;
       --text-soft: #b6b7c0;
-      --muted: #8e909b;
-      --faint: #686a75;
+      --muted: #9a9da8;
+      --faint: #858893;
       --workbench: #111216;
       --sidebar: #1b1c21;
       --paper: #18191d;
       --panel: #1c1d22;
       --line: #2b2c33;
       --line-strong: #383943;
+      --control-border: #71757f;
       --hover: #282930;
       --selection: #37334f;
       --green: #71c7aa;
+      --on-green: #10211c;
       --green-soft: #1d342d;
       --amber: #d9aa66;
       --amber-soft: #362c20;
@@ -63,9 +70,10 @@
       font-size: 13px;
       -webkit-font-smoothing: antialiased;
     }
-    button, input { font: inherit; }
+    button, input, textarea, select { font: inherit; }
     button { color: inherit; }
-    button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+    button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible,
+    [tabindex]:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
@@ -132,7 +140,7 @@
     .sidebar-head { height: 51px; padding: 0 14px 0 17px; display: flex; align-items: center; justify-content: space-between; }
     .sidebar-title { font-size: 12px; font-weight: 650; }
     .sidebar-head-actions { display: flex; gap: 1px; }
-    .search-box { margin: 0 12px 15px; height: 31px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid var(--line); background: var(--paper); border-radius: 7px; color: var(--muted); }
+    .search-box { margin: 0 12px 15px; height: 31px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid var(--control-border); background: var(--paper); border-radius: 7px; color: var(--muted); }
     .search-box input { border: 0; outline: 0; background: transparent; min-width: 0; width: 100%; color: var(--text); font-size: 11px; }
     .search-box input::placeholder { color: var(--muted); }
     .key { font-family: inherit; font-size: 9px; color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; white-space: nowrap; }
@@ -263,7 +271,7 @@
     .clean-card { border: 1px solid #dcebe5; background: linear-gradient(145deg, var(--green-soft), var(--paper)); border-radius: 10px; padding: 14px; }
     [data-theme="dark"] .clean-card { border-color: #294a3e; }
     .clean-card-title { display: flex; align-items: center; gap: 8px; color: var(--green); font-size: 11px; font-weight: 650; }
-    .clean-check { width: 23px; height: 23px; border-radius: 50%; background: var(--green); color: #fff; display: grid; place-items: center; }
+    .clean-check { width: 23px; height: 23px; border-radius: 50%; background: var(--green); color: var(--on-green); display: grid; place-items: center; }
     .clean-check .icon { width: 13px; height: 13px; stroke-width: 2.2; }
     .clean-card p { color: var(--text-soft); font-size: 9.5px; line-height: 1.75; margin: 10px 0 12px; }
     .format-stats { display: flex; gap: 12px; border-top: 1px solid rgba(39, 131, 109, .13); padding-top: 11px; }
@@ -280,7 +288,7 @@
     .diff-source-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border: 1px solid var(--line); background: var(--paper); border-radius: 8px; margin-bottom: 12px; }
     .diff-source-switch button { height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 9.5px; cursor: pointer; }
     .diff-source-switch button:hover { color: var(--text); }
-    .diff-source-switch button.active { background: var(--accent); color: #fff; }
+    .diff-source-switch button.active { background: var(--accent); color: var(--on-accent); }
     .diff-summary { border: 1px solid var(--line); background: var(--paper); border-radius: 9px; padding: 14px; margin-bottom: 18px; }
     .diff-summary-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
     .diff-branch { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; }
@@ -343,9 +351,9 @@
     .verify-row .icon { color: var(--green); width: 13px; height: 13px; }
     .verify-row span:last-child { margin-left: auto; color: var(--muted); font-size: 8px; }
     .diff-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .button { height: 31px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--paper); color: var(--text-soft); font-size: 9.5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .button { height: 31px; border-radius: 6px; border: 1px solid var(--control-border); background: var(--paper); color: var(--text-soft); font-size: 9.5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
     .button:hover { background: var(--hover); }
-    .button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     .button.primary:hover { filter: brightness(.96); }
 
     .statusbar { display: grid; grid-template-columns: 290px minmax(0, 1fr) 284px; align-items: center; background: var(--sidebar); border-top: 1px solid var(--line); color: var(--muted); font-size: 9px; user-select: none; }

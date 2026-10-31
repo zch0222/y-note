@@ -95,8 +95,9 @@ test('blocks a conflicting save and overwrites only after keeping local content'
   expect(conflicted!.disk).not.toBe(conflicted!.current)
   expect(await diskSource(page)).toBe('# 外部修改\n')
 
-  page.once('dialog', dialog => dialog.accept())
-  await page.getByRole('button', { name: '保留本地' }).click()
+  await page.getByRole('button', { name: '保留我的草稿' }).click()
+  await expect(page.getByRole('alertdialog', { name: '保留我的草稿？' })).toBeVisible()
+  await page.getByRole('button', { name: '覆盖磁盘' }).click()
   await expect(page.locator('.notice-danger')).toHaveCount(0)
   await expect
     .poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.dirty))

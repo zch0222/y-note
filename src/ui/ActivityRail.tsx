@@ -1,22 +1,36 @@
 import { useAppStore } from '../state/useStore.js'
 import { Icon } from './Icon.js'
+import { shortcutAria, shortcutText } from './shortcuts.js'
 
 export function ActivityRail() {
   const store = useAppStore()
 
   return (
     <nav className="activity-rail" aria-label="活动栏">
-      <div className="brand" title="Y Note">
+      <div className="brand" title="Y Note" aria-hidden="true">
         Y
       </div>
-      <button className="rail-button active" type="button" title="文件" aria-label="文件">
+      <button
+        className={`rail-button${store.sidebarOpen ? ' active' : ''}`}
+        type="button"
+        title={`${store.sidebarOpen ? '隐藏' : '显示'}文件栏 (${shortcutText(
+          store.platform,
+          'Mod+Shift+B',
+        )})`}
+        aria-label={store.sidebarOpen ? '隐藏文件栏' : '显示文件栏'}
+        aria-expanded={store.sidebarOpen}
+        aria-controls="file-sidebar"
+        aria-keyshortcuts={shortcutAria(store.platform, 'Mod+Shift+B')}
+        onClick={() => store.toggleSidebar()}
+      >
         <Icon name="files" size="large" />
       </button>
       <button
         className="rail-button"
         type="button"
-        title="搜索文件 (Ctrl/Cmd + P)"
+        title={`搜索文件 (${shortcutText(store.platform, 'Mod+P')})`}
         aria-label="搜索文件"
+        aria-keyshortcuts={shortcutAria(store.platform, 'Mod+P')}
         onClick={() => document.getElementById('file-search')?.focus()}
       >
         <Icon name="search" size="large" />
@@ -26,6 +40,8 @@ export function ActivityRail() {
         type="button"
         title="源码改动"
         aria-label="源码改动"
+        aria-expanded={store.panelOpen && store.inspectorTab === 'diff'}
+        aria-controls="inspector"
         onClick={() => store.setInspectorTab('diff')}
       >
         <Icon name="git" size="large" />
@@ -34,22 +50,28 @@ export function ActivityRail() {
       <button
         className="rail-button"
         type="button"
-        title="快捷键"
-        aria-label="快捷键"
-        onClick={() => store.notify('Ctrl/Cmd+S 保存 · Ctrl/Cmd+O 打开 · Ctrl/Cmd+Shift+E 切换源码')}
+        title={`命令面板 (${shortcutText(store.platform, 'Mod+K')})`}
+        aria-label="命令面板"
+        aria-keyshortcuts={shortcutAria(store.platform, 'Mod+K')}
+        onClick={() => store.openOverlay('command')}
       >
         <Icon name="command" size="large" />
       </button>
       <button
         className="rail-button"
         type="button"
-        title="设置"
+        title={`设置 (${shortcutText(store.platform, 'Mod+,')})`}
         aria-label="设置"
-        onClick={() => store.notify('设置将在后续里程碑提供。')}
+        aria-keyshortcuts={shortcutAria(store.platform, 'Mod+,')}
+        onClick={() => store.openOverlay('settings')}
       >
         <Icon name="settings" size="large" />
       </button>
-      <div className="avatar" title={store.gateway.kind === 'tauri' ? '本地工作区' : '浏览器预览'}>
+      <div
+        className="avatar"
+        title={store.gateway.kind === 'tauri' ? '本地工作区' : '浏览器预览'}
+        aria-hidden="true"
+      >
         YN
       </div>
     </nav>

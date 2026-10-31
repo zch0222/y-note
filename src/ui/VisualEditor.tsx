@@ -40,6 +40,21 @@ export function VisualEditor({ doc }: { doc: DocState }) {
           class: 'ProseMirror ynote-prose',
           spellcheck: 'false',
           'aria-label': 'Markdown 编辑器',
+          'aria-multiline': 'true',
+        },
+        handleClick: (_view, _pos, event) => {
+          const target = event.target
+          const anchor =
+            target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null
+          if (!anchor) {
+            return false
+          }
+          if (!anchor.closest('.ProseMirror')) {
+            return false
+          }
+          event.preventDefault()
+          void store.openExternal(anchor.getAttribute('href') ?? '')
+          return true
         },
       },
     },

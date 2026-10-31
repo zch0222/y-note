@@ -81,7 +81,7 @@ export function EditorNotices({ doc }: { doc: DocState }) {
 
   if (doc.external === 'conflict' && !doc.readOnly) {
     notices.push(
-      <div className="notice notice-danger" key="conflict">
+      <div className="notice notice-danger" key="conflict" role="alert">
         <div className="notice-icon">
           <Icon name="shield" />
         </div>
@@ -94,8 +94,20 @@ export function EditorNotices({ doc }: { doc: DocState }) {
           </span>
         </div>
         <div className="notice-actions">
+          {doc.dirty ? (
+            <button
+              className="button"
+              type="button"
+              onClick={() => {
+                store.setDiffSource('local')
+                store.setInspectorTab('diff')
+              }}
+            >
+              比较差异
+            </button>
+          ) : null}
           <button className="button" type="button" onClick={() => void store.reloadFromDisk()}>
-            重新载入
+            使用磁盘版本
           </button>
           {doc.dirty ? (
             <button
@@ -103,7 +115,7 @@ export function EditorNotices({ doc }: { doc: DocState }) {
               type="button"
               onClick={() => void store.keepLocalConflict()}
             >
-              保留本地
+              保留我的草稿
             </button>
           ) : null}
         </div>
@@ -115,5 +127,9 @@ export function EditorNotices({ doc }: { doc: DocState }) {
     return null
   }
 
-  return <div className="notice-stack">{notices}</div>
+  return (
+    <div className="notice-stack" aria-live="polite">
+      {notices}
+    </div>
+  )
 }

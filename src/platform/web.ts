@@ -1,4 +1,5 @@
 import { sha256 } from '../source/encoding.js'
+import { isExternalUrlAllowed } from './external.js'
 import type {
   DocumentGateway,
   Draft,
@@ -96,6 +97,13 @@ export function createWebGateway(): DocumentGateway {
 
     async deleteDraft(path: string): Promise<void> {
       localStorage.removeItem(`${storagePrefix}${path}`)
+    },
+
+    async openExternal(url: string): Promise<void> {
+      if (!isExternalUrlAllowed(url)) {
+        throw new Error('Scheme is not allowed')
+      }
+      window.open(url, '_blank', 'noopener,noreferrer')
     },
 
     async registerDocument(opened: OpenedDocument): Promise<void> {

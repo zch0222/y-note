@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import type { WorkspaceNode } from '../platform/types.js'
 import { useAppStore } from '../state/useStore.js'
 import { Icon } from './Icon.js'
+import { shortcutText } from './shortcuts.js'
 
 function countFiles(node: WorkspaceNode): number {
   if (!node.isDir) {
@@ -56,6 +57,7 @@ function TreeRows({
         role="button"
         tabIndex={0}
         title={node.path}
+        aria-current={selected ? 'page' : undefined}
         onClick={() => onOpen(node.path)}
         onKeyDown={event => {
           if (event.key === 'Enter' || event.key === ' ') {
@@ -80,6 +82,7 @@ function TreeRows({
         role="button"
         tabIndex={0}
         title={node.path}
+        aria-expanded={isOpen}
         onClick={() => onToggle(node.path)}
         onKeyDown={event => {
           if (event.key === 'Enter' || event.key === ' ') {
@@ -142,9 +145,9 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="file-sidebar" aria-label="文件栏">
+    <aside className="file-sidebar" id="file-sidebar" aria-label="文件栏">
       <div className="sidebar-head">
-        <span className="sidebar-title">资源管理器</span>
+        <h2 className="sidebar-title">资源管理器</h2>
         <div className="sidebar-head-actions">
           <button
             className="icon-button"
@@ -178,18 +181,19 @@ export function Sidebar() {
         <input
           id="file-search"
           type="search"
+          aria-label="搜索工作区文件"
           placeholder="搜索文件"
           value={store.sidebarFilter}
           onChange={event => store.setSidebarFilter(event.target.value)}
         />
-        <span className="key">⌘P</span>
+        <span className="key">{shortcutText(store.platform, 'Mod+P')}</span>
       </label>
 
       <div className="tree-scroll">
-        <div className="section-label">
+        <h3 className="section-label">
           <Icon name="down" size="small" />
           工作区
-        </div>
+        </h3>
         {tree ? (
           <>
             <div className="tree-row" style={{ paddingLeft: 8 }} title={tree.path}>
@@ -231,10 +235,10 @@ export function Sidebar() {
         )}
 
         <div className="tree-gap" />
-        <div className="section-label">
+        <h3 className="section-label">
           <Icon name="clock" size="small" />
           最近打开
-        </div>
+        </h3>
         {recent.length === 0 ? (
           <div className="sidebar-empty">还没有打开过文件。</div>
         ) : (
@@ -247,6 +251,7 @@ export function Sidebar() {
                 role="button"
                 tabIndex={0}
                 title={entry.path}
+                aria-current={selected ? 'page' : undefined}
                 onClick={() => void store.openPath(entry.path)}
                 onKeyDown={event => {
                   if (event.key === 'Enter' || event.key === ' ') {
