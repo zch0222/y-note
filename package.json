@@ -1,0 +1,50 @@
+{
+  "name": "y-note",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first lossless Markdown editor",
+  "scripts": {
+    "dev": "vite --port 1420 --strictPort",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tiptap/core": "^3.30.3",
+    "@tiptap/extension-image": "^3.30.3",
+    "@tiptap/extension-list": "^3.30.3",
+    "@tiptap/extension-table": "^3.30.3",
+    "@tiptap/extension-table-cell": "^3.30.3",
+    "@tiptap/extension-table-header": "^3.30.3",
+    "@tiptap/extension-table-row": "^3.30.3",
+    "@tiptap/pm": "^3.30.3",
+    "@tiptap/react": "^3.30.3",
+    "@tiptap/starter-kit": "^3.30.3",
+    "iconv-lite": "^0.7.3",
+    "marked": "^17.0.6",
+    "react": "^19.2.9",
+    "react-dom": "^19.2.9"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "fast-check": "^4.10.2",
+    "jsdom": "^27.4.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.5",
+    "vitest": "^4.1.12"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
