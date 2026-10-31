@@ -16,7 +16,7 @@
 | 高保真桌面 UI | 已完成 | [design/y-note-ui.html](design/y-note-ui.html) |
 | 主编辑态与 Diff 态导出 | 已完成 | [主编辑态](design/y-note-editor.png) · [Diff 态](design/y-note-diff.png) |
 | UI 浏览器验证 | 已完成 | 1440×900 渲染；大纲/Diff、源码/WYSIWYG、暗色模式切换正常 |
-| Git 仓库初始化 | 已完成 | 本地仓库已初始化并提交；当前 6 个提交，HEAD `8c23dea`；已加入 `.gitignore` |
+| Git 仓库初始化 | 已完成 | 本地仓库已初始化并提交；M1 实施前基线为 6 个提交（HEAD `8c23dea`）；已加入 `.gitignore` |
 | M0 无损内核实现 | 已完成 | `src/source/`：FileEnvelope、SourceMap、SourceBuffer、S0–S5 补丁、投影、保存协议、原子写入 |
 | M0 内核级测试 | 已完成 | 6 个内核测试文件 176 个测试 + 1 个编辑桥接测试文件 4 个测试，共 180 个通过；M1 后扩展到 8 个文件 186 个测试；`tsc --noEmit` 无错误 |
 | M0 UI 级无操作验收 | 已完成 | 浏览器预览中打开演示文件 → 聚焦 → 源码/视觉切换 → 保存，SHA-256 前后一致且 `dirty=false` |
