@@ -1,6 +1,8 @@
 import type { Editor } from '@tiptap/core'
 import type { JSONContent } from '@tiptap/core'
 import type { Node as PMNode } from '@tiptap/pm/model'
+import type { Transaction } from '@tiptap/pm/state'
+import { ReplaceStep } from '@tiptap/pm/transform'
 
 import { eolSequenceAt } from '../source/encoding.js'
 import {
@@ -231,7 +233,13 @@ function commonAffixes(left: string, right: string): { prefix: number; suffix: n
 }
 
 export class EditorBridge {
+  fastEdits = 0
+  serializations = 0
+  fullDiffs = 0
+  inputDurations: number[] = []
   private lastDoc: JSONContent
+  private lastNode: PMNode | null
+  private lastDocStale = false
   private applying = false
   private destroyed = false
 
@@ -240,6 +248,7 @@ export class EditorBridge {
     private readonly buffer: SourceBuffer,
     private readonly callbacks: BridgeCallbacks,
   ) {
+    this.lastNode = editor.state.doc
     this.lastDoc = editor.getJSON()
     editor.on('update', this.handleUpdate)
   }
@@ -251,6 +260,25 @@ export class EditorBridge {
 
   syncFromEditor(json = this.editor.getJSON()): void {
     this.lastDoc = json
+    this.lastNode = this.editor.state.doc
+    this.lastDocStale = false
+  }
+
+  private ensureLastDoc(): JSONContent {
+    if (this.lastDocStale) {
+      const node = this.lastNode ?? this.editor.state.doc
+      this.lastDoc = node.toJSON()
+      this.serializations += 1
+      this.lastNode = node
+      this.lastDocStale = false
+    }
+    return this.lastDoc
+  }
+
+  private acceptDocument(next: JSONContent): void {
+    this.lastDoc = next
+    this.lastNode = this.editor.state.doc
+    this.lastDocStale = false
   }
 
   toggleMark(mark: MarkName): boolean {
@@ -273,7 +301,7 @@ export class EditorBridge {
       return false
     }
 
-    const flat = flattenBlocks(this.lastDoc).find(block =>
+    const flat = flattenBlocks(this.ensureLastDoc()).find(block =>
       block.anchors.some(anchor => anchor.id === startRun.id),
     )
     if (!flat?.sourceId) {
@@ -364,14 +392,31 @@ export class EditorBridge {
     return false
   }
 
-  private handleUpdate = (): void => {
+  private handleUpdate = ({ transaction }: { transaction: Transaction }): void => {
     if (this.applying || this.destroyed) {
       return
     }
+    const started = performance.now()
+    try {
+      this.processUpdate(transaction)
+    } finally {
+      this.inputDurations.push(performance.now() - started)
+      if (this.inputDurations.length > 600) {
+        this.inputDurations.shift()
+      }
+    }
+  }
 
+  private processUpdate(transaction: Transaction): void {
+    if (this.tryFastTextChange(transaction)) {
+      return
+    }
+
+    this.fullDiffs += 1
     const next = this.editor.getJSON()
-    if (canonicalTop(next) === canonicalTop(this.lastDoc)) {
-      this.lastDoc = next
+    this.serializations += 1
+    if (canonicalTop(next) === canonicalTop(this.ensureLastDoc())) {
+      this.acceptDocument(next)
       return
     }
 
@@ -386,6 +431,86 @@ export class EditorBridge {
       outcome.reason ??
         '该修改无法安全映射到 Markdown 源码，已恢复。请切换到源码视图完成此操作。',
     )
+  }
+
+  private tryFastTextChange(transaction: Transaction): boolean {
+    if (!transaction.docChanged || transaction.steps.length !== 1) {
+      return false
+    }
+    const step = transaction.steps[0]
+    if (!(step instanceof ReplaceStep)) {
+      return false
+    }
+    if (step.slice.openStart !== 0 || step.slice.openEnd !== 0) {
+      return false
+    }
+    if (step.slice.content.childCount > 1) {
+      return false
+    }
+    const insertedNode = step.slice.content.firstChild
+    if (insertedNode && !insertedNode.isText) {
+      return false
+    }
+    const inserted = insertedNode?.text ?? ''
+    if (inserted.includes('\n') || inserted.includes('\r')) {
+      return false
+    }
+
+    const target = textTargetAt(transaction.before, step.from, step.to)
+    if (!target) {
+      return false
+    }
+
+    const anchor = target.node.marks.find(mark => mark.type.name === 'sourceAnchor')
+    const sourceId = anchor?.attrs?.sourceId
+    if (typeof sourceId !== 'string') {
+      return false
+    }
+    const span = this.buffer.findSpan(sourceId)
+    if (!span || span.kind !== 'inline' || span.tokenType !== 'text') {
+      return false
+    }
+    const nodeText = target.node.text ?? ''
+    if (this.buffer.current.slice(span.contentStart, span.contentEnd) !== nodeText) {
+      return false
+    }
+
+    if (insertedNode && markSignatureOf(insertedNode) !== markSignatureOf(target.node)) {
+      return false
+    }
+
+    const relativeFrom = step.from - target.start
+    const relativeTo = step.to - target.start
+    const expected =
+      nodeText.slice(0, relativeFrom) + inserted + nodeText.slice(relativeTo)
+    if (!anchorTextMatches(transaction.doc, step.from, sourceId, expected)) {
+      return false
+    }
+
+    const result = replaceText(this.buffer, {
+      spanId: sourceId,
+      from: relativeFrom,
+      to: relativeTo,
+      insert: inserted,
+    })
+    if (!result.applied) {
+      return false
+    }
+
+    const updated = this.buffer.findSpan(sourceId)
+    if (
+      !updated ||
+      this.buffer.current.slice(updated.contentStart, updated.contentEnd) !== expected
+    ) {
+      this.reproject(this.captureHint())
+      return true
+    }
+
+    this.lastNode = transaction.doc
+    this.lastDocStale = true
+    this.fastEdits += 1
+    this.callbacks.onSourceApplied()
+    return true
   }
 
   private apply(next: JSONContent, hint: SelectionHint): DiffOutcome {
@@ -433,7 +558,7 @@ export class EditorBridge {
               reason: result.reason ?? '标题级别无法无损写回，已恢复。',
             }
           }
-          this.lastDoc = next
+          this.acceptDocument(next)
           this.callbacks.onSourceApplied()
           this.ensureAnchors()
           return { ok: true }
@@ -442,7 +567,7 @@ export class EditorBridge {
         if (textChanges.length === 1 && !levelChange) {
           const outcome = this.applyTextChange(textChanges[0]!.old, textChanges[0]!.next)
           if (outcome === true) {
-            this.lastDoc = next
+            this.acceptDocument(next)
             this.callbacks.onSourceApplied()
             this.ensureAnchors()
             return { ok: true }
@@ -566,7 +691,7 @@ export class EditorBridge {
     const inserted = newTop.slice(start, newEnd)
 
     if (removed.length === 0 && inserted.length === 0) {
-      this.lastDoc = next
+      this.acceptDocument(next)
       return { ok: true }
     }
 
@@ -574,7 +699,7 @@ export class EditorBridge {
 
     if (roots.length === 0 && this.buffer.current.length === 0) {
       if (inserted.length === 0) {
-        this.lastDoc = next
+        this.acceptDocument(next)
         return { ok: true }
       }
       const emptyEol = this.eolAt(0)
@@ -586,7 +711,7 @@ export class EditorBridge {
         }
       }
       if (contents.length === 0) {
-        this.lastDoc = next
+        this.acceptDocument(next)
         return { ok: true }
       }
       const result = this.buffer.applyEdits(
@@ -659,6 +784,8 @@ export class EditorBridge {
   private reproject(hint?: SelectionHint): void {
     const projected = toTiptapDocument(projectDocument(this.buffer.map))
     this.lastDoc = projected
+    this.lastNode = null
+    this.lastDocStale = true
     this.callbacks.onProjected(projected, hint)
   }
 
@@ -751,6 +878,67 @@ export class EditorBridge {
     })
     return runs
   }
+}
+
+interface TextTarget {
+  node: PMNode
+  start: number
+  end: number
+}
+
+function textTargetAt(doc: PMNode, from: number, to: number): TextTarget | null {
+  if (from < 0 || to < from || to > doc.content.size) {
+    return null
+  }
+  const $from = doc.resolve(from)
+  const $to = doc.resolve(to)
+  if (!$from.parent.isTextblock || $from.parent !== $to.parent) {
+    return null
+  }
+
+  const count = $from.parent.childCount
+  let offset = $from.start()
+  for (let index = 0; index < count; index += 1) {
+    const child = $from.parent.child(index)
+    const start = offset
+    const end = start + child.nodeSize
+    const startAllowed = from > start || (index === 0 && from === start)
+    const endAllowed = to < end || (index === count - 1 && to === end)
+    if (child.isText && startAllowed && endAllowed && from >= start && to <= end) {
+      return { node: child, start, end }
+    }
+    offset = end
+  }
+  return null
+}
+
+function markSignatureOf(node: PMNode): string {
+  return node.marks
+    .filter(mark => mark.type.name !== 'sourceAnchor')
+    .map(mark => `${mark.type.name}:${JSON.stringify(stableValue(mark.attrs))}`)
+    .sort()
+    .join('|')
+}
+
+function anchorTextMatches(doc: PMNode, position: number, id: string, expected: string): boolean {
+  const clamped = Math.max(0, Math.min(position, doc.content.size))
+  const $position = doc.resolve(clamped)
+  if (!$position.parent.isTextblock) {
+    return false
+  }
+  let observed = ''
+  const parent = $position.parent
+  for (let index = 0; index < parent.childCount; index += 1) {
+    const child = parent.child(index)
+    if (!child.isText) {
+      continue
+    }
+    const anchor = child.marks.find(mark => mark.type.name === 'sourceAnchor')
+    if (anchor?.attrs?.sourceId === id) {
+      observed += child.text ?? ''
+    }
+  }
+  return observed === expected
 }
 
 function blockContentStart(

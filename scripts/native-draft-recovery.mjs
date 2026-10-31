@@ -241,7 +241,28 @@ if (mode === 'prepare') {
     )
     check('恢复保存的 Git Diff 只有一行增删', (diff.match(/^@@/gm) ?? []).length === 1)
 
-    fs.rmSync(repo, { recursive: true, force: true })
+    await page.evaluate(async () => {
+      const store = window.__YNOTE_DEBUG__?.store
+      if (!store) {
+        return
+      }
+      await store.stopWatching().catch(() => undefined)
+      store.doc = null
+      store.emit()
+    })
+    await new Promise(resolve => setTimeout(resolve, 300))
+    let removed = false
+    for (let attempt = 0; attempt < 5 && !removed; attempt += 1) {
+      try {
+        fs.rmSync(repo, { recursive: true, force: true })
+        removed = true
+      } catch (error) {
+        if (attempt === 4) {
+          throw error
+        }
+        await new Promise(resolve => setTimeout(resolve, 300))
+      }
+    }
     fs.rmSync(STATE_FILE, { force: true })
     console.log('Temporary recovery repository removed.')
     console.log(JSON.stringify({ ok: true, total: results.length, results }, null, 2))

@@ -1,7 +1,7 @@
 # Y Note 进度与里程碑
 
 最后更新：2026-11-01
-当前阶段：**M0、M1 已完成（Windows）；M2 只读 Git Diff 首切片已完成并通过 Windows 原生对照，Worker、性能与三平台未开始**
+当前阶段：**M0、M1 已完成（Windows）；M2 在 Windows 上完成 Git 块级分类、Worker 分析、输入快路径、视觉虚拟化与 1 MB / 10,000 块性能预算；macOS/Linux 实机验证仍未开始**
 技术方向：React 19 · Tiptap 3.30.3 · Tauri 2 · Windows / macOS / Linux
 
 本文只记录已经验证的进展，不以代码量或主观百分比代替完成状态。里程碑只有在对应验收条件全部通过后才能标记为完成。
@@ -18,7 +18,7 @@
 | UI 浏览器验证 | 已完成 | 1440×900 渲染；大纲/Diff、源码/WYSIWYG、暗色模式切换正常 |
 | Git 仓库初始化 | 已完成 | 本地仓库已初始化并提交；M1 实施前基线为 6 个提交（HEAD `8c23dea`）；已加入 `.gitignore` |
 | M0 无损内核实现 | 已完成 | `src/source/`：FileEnvelope、SourceMap、SourceBuffer、S0–S5 补丁、投影、保存协议、原子写入 |
-| M0 内核级测试 | 已完成 | 6 个内核测试文件 176 个测试 + 1 个编辑桥接测试文件 4 个测试，共 180 个通过；M1 后扩展到 8 个文件 187 个测试；M2 Git Diff 后为 189 个；`tsc --noEmit` 无错误 |
+| M0 内核级测试 | 已完成 | 9 个测试文件共 204 个测试通过（M2 后）；`tsc --noEmit` 无错误 |
 | M0 UI 级无操作验收 | 已完成 | 浏览器预览中打开演示文件 → 聚焦 → 源码/视觉切换 → 保存，SHA-256 前后一致且 `dirty=false` |
 | React + Vite + Tauri 应用脚手架 | 已完成 | React 19.2.9、Vite 8.3.5、Tauri 2.12.4；前端生产构建与原生 debug 二进制构建均通过 |
 | Tiptap 投影与编辑桥接 | 已完成 | `src/editor/`：sourceId schema、投影接入、增量 patch、选区提示回传；浏览器预览验证 |
@@ -27,8 +27,13 @@
 | 所见即所得编辑 | 部分完成 | 段落、标题、粗体/斜体/删除线/行内代码、列表、引用、代码块、任务勾选已接入；表格结构编辑与图片插入仍只在源码模式处理 |
 | 原生文件监听 | 已完成（Windows 实机） | Rust `notify` watcher 在真实窗口捕获外部写入与删除；保存前 SHA 校验仍为兜底；网络盘待验证 |
 | 冲突态处置 | 已完成（Windows 实机） | 重新载入与保留本地在真实窗口通过；冲突保存不覆盖磁盘，删除文件后可重建 |
-| 自动化 E2E | 已完成（浏览器 + 原生窗口） | 8 条 Playwright 浏览器 E2E + 64 项 Windows/WebView2 原生验收 + 12 项强制退出草稿恢复验收 |
-| M2 只读 Git Diff 首切片 | 已完成（Windows） | Rust `read_git_diff` + 改动面板 Git/未保存双视图；原生窗口上面板状态、numstat、hunk、分支与 HEAD 均与 `git` CLI 一致；未保存编辑不进入 Git 差异 |
+| 自动化 E2E | 已完成（浏览器 + 原生窗口） | 11 条 Playwright 浏览器 E2E + 83 项 Windows/WebView2 原生验收 + 12 项强制退出草稿恢复验收 |
+| M2 只读 Git 状态与 Diff | 已完成（Windows） | Rust `read_git_diff` + 改动面板 Git/未保存双视图；modified/clean/staged/untracked/deleted/renamed/binary/truncated 均与 `git` CLI 对照通过；未保存编辑不进入 Git 差异 |
+| M2 块级变更说明与分类 | 已完成（Windows 原生） | `src/source/analysis.ts` + HEAD/工作区双版本读取；区分内容修改与格式改写，展示块类型、行号、摘要和未改动块数 |
+| M2 Worker 源索引与 Diff | 已完成（浏览器与 WebView2） | 打开时由 Worker 生成源索引；Git 与未保存差分在 Worker 计算；无 Worker 环境同步回退；`analysisMode` 可观测 |
+| M2 连续输入快路径 | 已完成（Windows 实测） | 单步纯文本事务直接写源补丁；180 + 60 次击键 0 全文 JSON 序列化、0 全文 Diff；保存与草稿仍走既有异步路径 |
+| M2 安全视觉虚拟化 | 已完成（Chromium/WebView2） | 顶层块与代码/表格/原始块使用 `content-visibility`；完整 PM 文档与 DOM 保留；E2E 验证离屏查找、选区、焦点与撤销 |
+| M2 1 MB / 10,000 块性能预算 | 已达标（Windows） | Edge 156：TTI 1038.5 ms，输入 P95 1.4 ms（末尾）/ 4.1 ms（开头）；WebView2 156：TTI 1025.1 ms，P95 2.0 / 5.0 ms；可复现脚本与 JSON 报告 |
 | 三平台原生验证 | 未开始 | 尚无 macOS、Linux 安装包或实机结果 |
 
 ## 2. 已完成阶段：产品与架构设计
@@ -57,7 +62,7 @@
 |---|---|---|---|
 | M0 无损内核证明 | 证明局部编辑不会产生全文格式差异 | 已完成 | 干净 Diff 合同、自动化测试与 UI 级无操作验收全部通过 |
 | M1 可用本地编辑器 | 打开、编辑、保存真实 Markdown 文件 | 已完成（Windows）：全部退出条件与自动化验收通过；macOS/Linux 未验证 | 核心编辑闭环、恢复和冲突保护通过端到端验证 |
-| M2 Git 可观察性与性能 | 看清真实修改，满足长文档性能预算 | 进行中：只读 Git Diff 已完成；Worker、虚拟化、性能与三平台未开始 | 只读 Diff、长文档与三平台压力测试通过 |
+| M2 Git 可观察性与性能 | 看清真实修改，满足长文档性能预算 | 进行中：Windows 范围已完成（只读 Diff、块级分类、Worker、虚拟化、性能预算）；macOS/Linux 未验证 | 只读 Diff、长文档与三平台压力测试通过 |
 | M3 视觉完善与发布 | 形成可分发的跨平台桌面产品 | 未开始 | UI、可访问性、安装包和发布检查全部通过 |
 
 目标日期待项目排期后补充，不在没有估算依据时承诺日期。
@@ -113,7 +118,7 @@ npm run test:native:draft:prepare                    # 强制退出草稿恢复�
 npm run test:native:draft:verify                     # 强制退出草稿恢复：验证阶段
 ```
 
-最近一次结果（2026-11-01，M2 Git Diff 切片完成后复测）：`npm run check` 通过，8 个测试文件共 189 个测试通过；`tsc --noEmit` 无错误；`npm run build` 生产构建通过（JS 811.53 kB，gzip 253.12 kB，Vite 提示超过 500 kB 预算）。
+最近一次结果（2026-11-01，M2 Windows 范围完成后复测）：`npm run check` 通过，9 个测试文件共 204 个测试通过；`tsc --noEmit` 无错误；`npm run build` 生产构建通过（主包 829.90 kB，gzip 258.76 kB；Worker 包 64.00 kB；Vite 提示主包超过 500 kB 预算）。
 
 ### 退出条件
 
@@ -165,7 +170,7 @@ npm run test:native:draft:verify                     # 强制退出草稿恢复�
 | 文件工作流 | `src/state/store.ts` | 打开、保存、最近文件、原生 watcher 外部修改检测、冲突保护与“重新载入/保留本地”、草稿恢复/丢弃、只读降级 |
 | Tauri 后端 | `src-tauri/src/` | 临时文件 + fsync + 原子 rename、权限保留、SHA 冲突检测、文件缺失分支、草稿读写删除（应用数据目录）、工作区树、`notify` 文档目录监听与事件 |
 | 自动化验证 | `tests/app-store.test.ts`、`e2e/editor.spec.ts`、`playwright.config.ts` | 7 条应用层集成测试；7 条 Playwright 浏览器 E2E |
-| 原生验收工具 | `scripts/native-acceptance.mjs`、`scripts/select-open-file.ps1`、`scripts/close-open-dialogs.ps1` | M1 时 55 项 Windows/WebView2 原生验收，M2 扩展到 64 项，含真实文件选择框、Git 工作区/单点 Diff、Git 面板对照、文件树/最近文件、IME、撤销/重做与回滚 |
+| 原生验收工具 | `scripts/native-acceptance.mjs`、`scripts/select-open-file.ps1`、`scripts/close-open-dialogs.ps1` | M1 时 55 项 Windows/WebView2 原生验收，M2 扩展到 83 项，含真实文件选择框、Git 工作区/单点 Diff、Git 状态/块级分类、文件树/最近文件、IME、撤销/重做与回滚 |
 | 草稿恢复验收 | `scripts/native-draft-recovery.mjs` | prepare/verify 两阶段：编辑不保存 → 强制结束进程 → 重启 → 恢复草稿 → 保存，12 项通过 |
 
 ### 验证记录（浏览器预览）
@@ -197,7 +202,7 @@ npm run test:native:draft:verify                     # 强制退出草稿恢复�
 
 ### 验证记录（原生窗口，2026-11-01）
 
-在 Windows 上用 Tauri 2.12.5 原生窗口运行，通过 WebView2 CDP 驱动页面并调用真实 Tauri IPC；Git 验收使用临时仓库，结束后删除。`npm run test:native` 55 项全部通过。
+在 Windows 上用 Tauri 2.12.5 原生窗口运行，通过 WebView2 CDP 驱动页面并调用真实 Tauri IPC；Git 验收使用临时仓库，结束后删除。M1 时 `npm run test:native` 55 项全部通过；M2 后扩展到 83 项，仍然全部通过。
 
 | 场景 | 结果 |
 |---|---|
@@ -271,9 +276,9 @@ npm run test:native:draft:verify                     # 强制退出草稿恢复�
 - 跨块重组、列表标记宽度变化、Setext 标题层级变化等结构操作会回滚并提示，需要切到源码视图完成。
 - 空段落（回车产生、尚无 sourceId）属于临时编辑态；在其中输入文字后才会写入源码，单独存在的空段落不会保存。
 - 源码视图是纯文本 textarea，无语法高亮；无法映射的原始块通过源码模式编辑。
-- “源码改动”面板是基线—当前缓冲的本地行级差异预览，不是 M2 的真实 Git Diff；M1 的 Git 契约已在外部临时仓库中验证。
+- M1 的“源码改动”仅比较打开时基线；M2 已改为“Git 差异 / 未保存改动”双视图，未保存差异以最近保存文本为基线，并在 Worker 中计算。
 - 设置与快捷键按钮目前只显示提示；暂无自动保存、多标签页和命令面板。
-- 长文档性能未测量；生产构建存在 500 kB chunk 警告。
+- 长文档性能已在 Windows 完成 M2 实测（见第 6 节）；生产构建主包 829.90 kB，仍超过 Vite 500 kB 提示阈值。
 - Tauri CSP 仍为 `null`，capability 仅包含默认核心权限与 dialog；发布前需完成安全收紧。
 
 ## 6. M2：Git 可观察性与性能
@@ -286,41 +291,87 @@ npm run test:native:draft:verify                     # 强制退出草稿恢复�
 - 对昂贵 NodeView 做安全视觉虚拟化，保留完整 ProseMirror 文档语义。
 - 建立 1 MB / 10,000 顶层块基准文档和三平台压力测试。
 
-### 实现状态（只读 Git Diff 首切片，2026-11-01）
+### 实现状态（Windows，2026-11-01）
 
 | 模块 | 文件 | 已实现能力 |
 |---|---|---|
-| Rust Git 只读后端 | `src-tauri/src/git.rs` | `rev-parse` 定位仓库根/分支/HEAD；porcelain 状态分类（clean/modified/staged/untracked/deleted/ignored/unborn/not-repo）；`git diff --numstat HEAD` 计数；unified diff 解析为 hunk、行号与增删行；二进制识别；4 MB / 200 hunk / 4000 行截断保护；Git 未安装与非仓库安全返回 |
-| 平台与状态层 | `src/platform/types.ts`、`src/platform/tauri.ts`、`src/platform/web.ts`、`src/state/store.ts` | `readGitDiff` 网关；打开、保存、保留本地、外部变更和切换“改动”页时刷新；过期响应丢弃；浏览器预览返回 not-repo 状态 |
-| 改动面板 | `src/ui/Inspector.tsx`、`src/styles/design.css` | “Git 差异 / 未保存改动”双视图；分支、HEAD、文件状态、增删统计与手动刷新；hunk 行号与增删高亮；not-repo/untracked/unborn/binary/error/clean 空态 |
+| Rust Git 只读后端 | `src-tauri/src/git.rs` | `rev-parse` 定位仓库根/分支/HEAD；全仓库 porcelain 状态扫描（避免 pathspec 关闭 rename 检测）；clean/modified/staged/untracked/deleted/renamed/ignored/unborn/not-repo 分类；`git diff --numstat HEAD` 计数；unified diff 解析为 hunk、行号与增删行；二进制识别；4 MB / 200 hunk / 4000 行截断；`read_git_versions` 返回 HEAD 与工作区原始字节（8 MB 上限）和重命名旧路径；Git 未安装与非仓库安全返回 |
+| 块级变更分析 | `src/source/analysis.ts` | 顶层块对齐（公共前后缀 + 唯一锚点 + LIS）、新增/删除/修改、行号、摘要；按可见文本与内容属性区分“内容修改”，按标记/空白/结构属性区分“格式改写”；单文件最多分析 200 处并标记截断 |
+| Worker 分析 | `src/workers/analysis.worker.ts`、`src/workers/analysisClient.ts` | `index`、`analyze`、`blocks` 三类消息；打开文档时由 Worker 生成 SourceMap；Git 与未保存差分在 Worker 计算；Worker 不可用时同步回退；过期响应按 token 丢弃 |
+| 平台与状态层 | `src/platform/types.ts`、`src/platform/tauri.ts`、`src/state/store.ts` | `readGitVersions` 网关；`gitBlocks`/`localDiff` 状态；未保存差分以“上次保存文本”为基线并 500 ms 防抖；保存、保留本地、恢复草稿后清空；打开文档记录 `lastOpenMetrics` |
+| 改动面板 | `src/ui/Inspector.tsx`、`src/styles/design.css` | “Git 差异 / 未保存改动”双视图；分支、HEAD、状态、增删统计；块级摘要“N 处内容修改 · M 处格式改写 · K 块未改动”与逐块条目；untracked/staged/deleted/renamed/binary/truncated/not-repo/clean 空态；重命名行级差异明确引导 `git diff -M` |
+| 连续输入快路径 | `src/editor/bridge.ts` | 单步纯文本 `ReplaceStep` 直接写源补丁并按锚点校验；仅在回退路径序列化 `lastDoc`；字数与大纲在 250 ms 空闲后计算；`fastEdits`/`serializations`/`fullDiffs`/`inputDurations` 可观测 |
+| 安全视觉虚拟化 | `src/styles/app.css`、`src/editor/schema.tsx` | 所有顶层块与代码块/表格/原始块使用 `content-visibility: auto` 与 `contain-intrinsic-size`；完整 ProseMirror 文档、DOM、选区与撤销历史保留；图片 `loading="lazy"`、`decoding="async"` |
+| 性能基准 | `scripts/perf-bench.mjs` | 生成 10,000 顶层块 / 1,034,642 B 文档；浏览器（Edge）与原生（WebView2 CDP）两种模式；测量首次可交互、180 次末尾输入、60 次开头输入、P50/P95/max、序列化与全文 Diff 次数；输出 `test-results/perf-*.json` |
 
-验证记录（Windows 原生窗口，2026-11-01）：
+### 性能实测（Windows，2026-11-01）
 
-- `npm run test:native` 64 项通过，其中新增 9 项 Git 面板断言。
-- 保存后的面板状态为 `modified`，`+1/−1` 与 `git diff --numstat HEAD` 一致；hunk 数、分支与 HEAD 与 CLI 一致；渲染的增删行文本正确。
-- 提交检查点后刷新，面板显示“与 HEAD 版本一致”；未保存的缓冲编辑刷新后 Git 状态仍为 clean、面板无差异行，确认只读 Git 视图不混入草稿。
-- `cargo test` 13 项通过（新增 7 项：clean、modified、staged、untracked/deleted、not-repo、多 hunk 解析、零长度区间）。
-- `npm run check` 189 项通过；`npm run test:e2e` 8 条通过；`npm run build` 通过（JS 811.53 kB，gzip 253.12 kB）。
+环境：Windows 10.0.26300 x64，AMD Ryzen 7 5800H，64 GB 内存，Node v22.23.2，Edge/WebView2 156.0.4314.50，视口 1440×900。基准通过 Vite dev 服务器加载（未压缩模块，结果偏保守）。
 
-尚未完成：
+样本：10,000 个顶层块，1,034,642 字节；末尾输入 180 次击键（另有 20 次预热），开头输入 60 次击键。
 
-- 块级变更说明与“内容变化/格式变化”分类未实现；当前为 Git 行级差异。
-- untracked/deleted/staged/binary/rename 和大差异截断的 UI 状态尚未逐一实机验收；Rust 层已有分类与解析测试。
-- 非 UTF-8 文件的 diff 以 UTF-8 有损解码显示，尚未按源文件编码解码。
-- Worker 源索引、NodeView 虚拟化、1 MB / 10,000 块性能预算与三平台压力测试未开始。
-- Git 未安装、网络盘仓库与特殊文件系统的实机行为未验证。
+| 指标 | 浏览器 Edge | 原生 WebView2 | 预算 | 结果 |
+|---|---|---|---|---|
+| 首次可交互（打开→编辑器可见→两帧） | 1038.5 ms | 1025.1 ms | `<1500 ms` | 通过 |
+| 输入处理 P95（文档末尾） | 1.4 ms | 2.0 ms | `<16 ms` | 通过 |
+| 输入处理 P95（文档开头，需平移后续块） | 4.1 ms | 5.0 ms | `<16 ms` | 通过 |
+| 末尾输入期间全文序列化 / 全文 Diff | 0 / 0 | 0 / 0 | 均为 0 | 通过 |
+| 末尾输入期间快速源补丁 | 180 / 180 | 180 / 180 | 全部命中 | 通过 |
+| 开头输入期间序列化 / 全文 Diff / 快速补丁 | 0 / 0 / 60 | 0 / 0 / 60 | 均为 0 / 全部命中 | 通过 |
+| 源映射问题 | 0 | 0 | 0 | 通过 |
+
+打开耗时拆分（浏览器 / 原生）：解码 12.5 / 11.5 ms，Worker 源索引 362.9 / 355.4 ms，投影 10.1 / 11.8 ms，`openOpened` 总计 848.9 / 833.6 ms。自动化击键墙钟时间记录在 JSON 报告中，包含 Playwright/CDP 往返与浏览器绘制，不作为主线程输入处理预算。
+
+可复现命令：
+
+```bash
+# 浏览器（会自动启动或复用 http://127.0.0.1:1420）
+npm run perf:bench
+
+# 原生：先启动带 WebView2 CDP 的应用（另开终端）
+WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 npm run tauri -- dev --no-watch
+npm run perf:bench -- --native
+```
+
+报告文件：`test-results/perf-browser.json`、`test-results/perf-native.json`（已被 `.gitignore` 忽略）。脚本在任一预算未达标、块数不符或出现页面错误时以非零码退出；可用 `--no-strict` 仅采集数据。
+
+### 验证记录（Windows，2026-11-01）
+
+- `npm run check`：9 个测试文件、204 个测试通过，`tsc --noEmit` 无错误。
+- `npm run test:e2e`：11 条 Playwright 测试通过（Edge 1440×900），新增连续输入快路径、块级内容/格式分类、离屏选区/查找/焦点/撤销断言。
+- `npm run test:native`：83 项 Windows/WebView2 验收通过，新增 Git untracked/staged/deleted/renamed/binary/非 UTF-8/大差异截断、块级分类与 CLI 对照。
+- `npm run test:native:draft:prepare` / `verify`：强制退出草稿恢复 12 项通过，清理阶段不再因文件监听持有目录而报 EBUSY。
+- `cargo test`：16 项通过（新增 3 项：双版本字节、untracked/deleted 版本、rename 旧路径）。
+- `npm run build`：生产构建通过；主包 829.90 kB（gzip 258.76 kB），独立 Worker 包 64.00 kB。
 
 ### 退出条件
 
 - [x] Diff 面板与真实 Git 源文件差异一致。
-  - Windows 原生窗口已验证 modified/clean 状态与 CLI 的 numstat、hunk、分支和 HEAD 一致，并确认未保存编辑不进入 Git 差异；untracked/deleted/binary/rename 的文件级分类由 Rust 测试覆盖，UI 状态待扩验。
-- [ ] 1 MB 文档首次可交互时间达到 `<1.5 s` 的实测预算，或明确记录未达标项。
-- [ ] 主线程输入处理 P95 达到 `<16 ms` 的实测预算，或明确记录未达标项。
-- [ ] 连续输入时无全文序列化、全文 Diff 和同步 IPC。
-- [ ] 虚拟化不破坏选区、查找、撤销和焦点行为。
+  - Windows 原生窗口已验证 modified/clean 与 CLI 的 numstat、hunk、分支和 HEAD 一致；staged、untracked、deleted、renamed、binary 和大差异截断均已实机验收；未保存编辑不进入 Git 差异。
+- [x] 1 MB 文档首次可交互时间达到 `<1.5 s` 的实测预算，或明确记录未达标项。
+  - Windows 实测：浏览器 1038.5 ms，原生 WebView2 1025.1 ms（10,000 块 / 1,034,642 B）。macOS/Linux 尚未实测，见下方未完成项。
+- [x] 主线程输入处理 P95 达到 `<16 ms` 的实测预算，或明确记录未达标项。
+  - Windows 实测：末尾输入 P95 1.4 ms（浏览器）/ 2.0 ms（原生）；开头输入 P95 4.1 ms / 5.0 ms。测量范围为编辑桥接更新处理，不含自动化工具往返与浏览器绘制。
+- [x] 连续输入时无全文序列化、全文 Diff 和同步 IPC。
+  - 末尾 180 次与开头 60 次击键全部命中快速源补丁；序列化与全文 Diff 均为 0；输入路径没有 Tauri IPC，草稿写入在 1.2 s 空闲后触发，本地差分在 Worker 中 500 ms 防抖计算。
+- [x] 虚拟化不破坏选区、查找、撤销和焦点行为。
+  - E2E 在 240 块文档中滚动到底部后仍能读取离屏文本，并完成末尾选区输入、源映射校验与撤销；10,000 块基准同时验证末尾与开头输入、源映射问题为 0。
 - [ ] Windows、macOS、Linux 的文件监听与长文档测试均有结果。
+  - Windows 文件监听与长文档测试已完成；macOS/Linux 没有可用实机或构建环境，尚未运行。
 
 性能数字必须附测试环境、样本和可复现命令，不能把设计预算写成实测结果。
+
+### 已知限制
+
+- macOS/Linux 尚未运行原生验收、文件监听、长文档或性能基准；当前完成范围只覆盖 Windows。WSL2 缺少 WebKitGTK、cargo 与 xvfb，未作为 Linux 原生结果。
+- 性能预算测量的是编辑桥接主线程处理时间；浏览器事件分发、Playwright/CDP 往返与绘制时间记录在 JSON 的墙钟字段中，未计入 P95。
+- `content-visibility` 依赖 Chromium/WebView2；其他引擎会退化为普通渲染，功能不受影响，但不享受离屏布局/绘制优化。`contain-intrinsic-size` 可能造成滚动条高度估算的轻微跳动。
+- 非 UTF-8 文件的 Git 行级 hunk 仍由 Rust 以 UTF-8 有损显示；块级摘要使用源编码解码并在无法无损解码时标注“有损文本”。
+- 重命名文件不显示行级 hunk（Git pathspec 会关闭 rename 检测，导致显示为整文件新增）；面板显示块级摘要并提示使用 `git diff -M`。重命名且内容修改的行级展示待后续实现。
+- Git 状态为识别 rename 扫描整个仓库；双版本文档上限 8 MB。超大仓库或超大文件会增加“改动”页刷新耗时，块级分析另有 200 处上限。
+- Worker 不可用或崩溃时，源索引与差分回退到主线程同步执行，1 MB 文档的打开耗时会上升。
+- 源码视图仍是纯文本 textarea；块级分类基于顶层 Markdown 块，块间空白变化不作为独立变更条目。
+- 真实系统输入法候选窗、网络盘 watcher、特殊文件系统和三平台安装包仍未验证。
 
 ## 7. M3：视觉完善与发布
 
@@ -343,15 +394,14 @@ npm run test:native:draft:verify                     # 强制退出草稿恢复�
 
 ## 8. 下一步行动
 
-M0、M1 已完成（Windows），M2 只读 Git Diff 已落地。继续完成 M2 其余范围，同时保留已披露限制的后续验证：
+M0、M1 已完成（Windows）；M2 的 Windows 范围已完成并通过性能预算。“三平台均有结果”仍是 M2 唯一未勾选的退出条件：
 
-1. M2 剩余：块级变更说明与内容/格式分类、Worker 源索引、NodeView 虚拟化、1 MB / 10,000 块性能预算与三平台压力测试。
-2. 扩展 Git 面板实机验收：untracked、deleted、staged、binary、rename、大差异截断与非 UTF-8 编码。
-3. 在 macOS/Linux 重跑 64 项原生验收脚本与长文档测试；当前仅覆盖 Windows。
-4. 用真实系统输入法（如微软拼音）人工验收候选窗、组词与选区；现有 IME 验收使用 Chromium composition 协议。
+1. 在 macOS/Linux 重跑 83 项原生验收、文件监听、长文档与 `npm run perf:bench -- --native`；当前只有 Windows 数据。
+2. 补齐重命名且内容修改的行级 Diff，以及非 UTF-8 文件按源编码解码的行级显示。
+3. 用真实系统输入法（如微软拼音）人工验收候选窗、组词与选区；现有 IME 验收使用 Chromium composition 协议。
+4. 验证网络盘、特殊文件系统与超大仓库的 watcher/Git 刷新行为。
 5. 按需补齐表格结构编辑与图片插入；当前仅单元格文字与源码模式可用。
-6. 验证网络盘、特殊文件系统上的 watcher 事件行为。
-7. M2 通过后进入 M3：设置、无障碍、CSP 收紧、三平台安装包与发布检查。
+6. M2 三平台条件通过后进入 M3：设置、无障碍、CSP 收紧、三平台安装包与发布检查。
 
 ## 9. 当前主要风险
 
@@ -363,18 +413,34 @@ M0、M1 已完成（Windows），M2 只读 Git Diff 已落地。继续完成 M2 
 | 表格和嵌套列表产生隐性重排 | 独立单元格/列表项区间与专项 golden tests 已覆盖；已用真实 Tiptap 事务验证基础块编辑，表格编辑仍未开放 |
 | Windows 与 Unix 原子替换语义不同 | Node 与 Rust 实现均有单元测试；发布前仍需三平台故障注入并确认权限保留 |
 | 投影 JSON 与真实 Tiptap schema/扩展不一致 | 已接入真实 schema 与桥接回滚；继续补事务级 golden tests，不允许直接信任投影文本 |
-| 长文档虚拟化破坏编辑器语义 | 只卸载昂贵视觉效果，保留完整 PM 文档和焦点附近节点 |
-| 浏览器预览与 Tauri 原生行为差异 | Windows 原生核心流程与文件选择框已验收；继续覆盖真实系统输入法与 macOS/Linux |
+| 长文档虚拟化破坏编辑器语义 | 使用 `content-visibility: auto` 只跳过离屏布局/绘制，不删除任何 PM 节点或 DOM；E2E 验证离屏查找、选区、焦点与撤销 |
+| 浏览器预览与 Tauri 原生行为差异 | Windows 原生核心流程、83 项验收与 1 MB 基准已通过；继续覆盖真实系统输入法与 macOS/Linux |
 | 原生 watcher 在原子替换、网络盘或特殊文件系统上的事件差异 | Windows 实机已验证原子替换、删除与外部编辑；继续验证网络盘、特殊文件系统与三平台 |
 | UI 与 SourceBuffer 世代不同步导致编辑器保留旧内容 | 已改为全局单调 epoch 并加入应用层与浏览器 E2E 回归断言；继续关注重新载入/切换路径 |
 | 撤销历史跨文档污染或重投影清空重做栈 | 每次文档加载使用独立 loadId 重建编辑器；内容已一致时跳过 setContent；已加入跨文档与撤销/重做回归测试 |
 | 中文 IME 组合输入与增量映射冲突 | Chromium composition 验收通过；继续用真实系统输入法人工验收候选窗交互 |
 | 结构编辑回滚造成用户困惑 | 回滚时明确提示并引导源码视图；逐步补齐高频结构操作 |
-| Git 未安装、文件不在仓库或非 UTF-8 内容 | 返回 not-repo/git-unavailable 与明确空态，不影响编辑和保存；非 UTF-8 diff 暂按 UTF-8 有损显示，后续按文档编码解码 |
-| Git diff 输出过大或仓库过大拖慢面板 | 只读按需刷新，限制 4 MB / 200 hunk / 4000 行并标记截断；Worker 化列入 M2 剩余范围 |
-| “Git 差异”与“未保存改动”混淆 | 面板明确双视图：Git 仅比较磁盘与 HEAD，未保存缓冲单独展示；原生验收断言未保存编辑不进入 Git 差异 |
+| SourceBuffer 增量索引与位置平移不一致 | 修改区域重建后删除旧索引项、写回新根，并对后续根做原地平移；随机编辑属性测试与 1 MB 开头输入基准覆盖 |
+| Git 未安装、文件不在仓库或非 UTF-8 内容 | 返回 not-repo/git-unavailable 与明确空态，不影响编辑和保存；块级摘要按源编码解码并标注有损，行级 hunk 仍为 UTF-8 有损显示 |
+| Git diff 输出过大或仓库过大拖慢面板 | 只读按需刷新，限制 4 MB / 200 hunk / 4000 行；块级分析最多 200 处；Git 与差分计算在 Worker 中执行 |
+| Git rename 检测与 pathspec 冲突 | 状态扫描整个仓库以保留 rename 检测；重命名文件不渲染可能误导的行级 hunk，块级摘要读取 HEAD 旧路径并提示 `git diff -M` |
+| Worker 不可用导致大文档阻塞主线程 | 自动回退同步分析；正常浏览器/WebView2 环境已通过 `analysisMode` 与基准确认使用 Worker |
+| 性能预算测量口径被误读 | `PROGRESS.md` 与 JSON 报告同时记录测量边界：TTI 含打开与两帧，P95 仅编辑桥接处理时间，墙钟时间单独记录 |
 
 ## 10. 更新记录
+
+### 2026-11-01（M2 Windows 范围完成）
+
+- 新增 `src/source/analysis.ts`：顶层块对齐、逐块变更说明、内容/格式分类、行号与 200 处截断；新增 15 个单元测试。
+- 新增 `src/workers/analysis.worker.ts` 与客户端：打开文档时在 Worker 生成源索引，Git 与未保存差分在 Worker 计算；同步回退保留。
+- Rust 增加 `read_git_versions`、全仓库状态扫描与 rename 分类/旧路径；原生验收覆盖 untracked、staged、deleted、renamed、binary、非 UTF-8、大差异截断与块级分类。
+- 改动面板增加块级摘要与条目；未保存差异改用“上次保存文本”为基线并 500 ms 防抖。
+- `EditorBridge` 增加单步纯文本快路径、惰性 JSON 序列化与字数/大纲延迟计算；连续输入不再全文序列化或全文 Diff。
+- SourceBuffer 修改区域重建改为增量更新索引与原地平移后续块；修复插入点落在根边界时把内容拆进空白 gap 的缺陷，属性测试连续多次通过。
+- 顶层块与昂贵块启用 `content-visibility`；新增 240 块虚拟化 E2E 与 1 MB / 10,000 块基准脚本。
+- Windows 实测：浏览器 TTI 1038.5 ms、输入 P95 1.4/4.1 ms；原生 TTI 1025.1 ms、P95 2.0/5.0 ms；末尾 180 次与开头 60 次输入均 0 全文序列化、0 全文 Diff。
+- `npm run check` 204 项、E2E 11 条、原生验收 83 项、草稿恢复 12 项、`cargo test` 16 项全部通过。
+- `PROGRESS.md` 勾选性能、序列化与虚拟化退出条件；“三平台均有结果”仍未勾选，macOS/Linux 无实机数据。
 
 ### 2026-11-01（M2 只读 Git Diff）
 

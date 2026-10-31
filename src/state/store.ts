@@ -4,18 +4,21 @@ import type { JSONContent } from '@tiptap/core'
 import { EditorBridge, type SelectionHint } from '../editor/bridge.js'
 import { collectOutline, countWords, toTiptapDocument } from '../editor/project.js'
 import type { OutlineItem } from '../editor/project.js'
+import type { BlockAnalysis, DiffPreview } from '../source/analysis.js'
 import { openEnvelope } from '../source/Envelope.js'
-import { sha256 } from '../source/encoding.js'
+import { decodeSource, sha256 } from '../source/encoding.js'
 import { setTaskChecked } from '../source/patch.js'
 import { projectDocument } from '../source/projection.js'
 import { SourceBuffer } from '../source/SourceBuffer.js'
 import { saveDocument } from '../source/save.js'
 import type { SaveIO } from '../source/save.js'
 import type { EolStyle, ReadOnlyReason, SourceEncoding, SourceEdit } from '../source/types.js'
+import { AnalysisClient } from '../workers/analysisClient.js'
 import type {
   DocumentGateway,
   Draft,
   GitDiff,
+  GitVersions,
   OpenedDocument,
   WorkspaceNode,
 } from '../platform/types.js'
@@ -31,6 +34,16 @@ export interface RecentFile {
   path: string
   name: string
   openedAt: number
+}
+
+export interface OpenMetrics {
+  bytes: number
+  blocks: number
+  decodeMs: number
+  indexMs: number
+  projectMs: number
+  totalMs: number
+  analysis: 'worker' | 'main'
 }
 
 export interface DocState {
@@ -108,7 +121,18 @@ export class AppStore {
   git: GitDiff | null = null
   gitLoading = false
   gitError: string | null = null
+  gitBlocks: BlockAnalysis | null = null
+  gitAnalysisLoading = false
+  gitAnalysisNote: string | null = null
+  localDiff: DiffPreview | null = null
+  localBlocks: BlockAnalysis | null = null
+  localAnalysisLoading = false
+  lastOpenMetrics: OpenMetrics | null = null
+  private analysis = new AnalysisClient()
   private gitToken = 0
+  private gitAnalysisToken = 0
+  private localAnalysisToken = 0
+  private localAnalysisTimer: ReturnType<typeof setTimeout> | null = null
   private epochCounter = 0
   private loadCounter = 0
   private draftTimer: ReturnType<typeof setTimeout> | null = null
@@ -136,6 +160,10 @@ export class AppStore {
   }
 
   getSnapshot = (): number => this.version
+
+  get analysisMode(): 'worker' | 'main' {
+    return this.analysis.runsInWorker ? 'worker' : 'main'
+  }
 
   emit(): void {
     if (this.disposed) {
@@ -241,10 +269,18 @@ export class AppStore {
     }
 
     this.resetGit()
+    this.resetLocalAnalysis()
+    const openStarted = performance.now()
     const envelope = openEnvelope(opened.path, opened.bytes)
-    const buffer = new SourceBuffer(envelope)
+    const decodedAt = performance.now()
+    const indexed = await this.analysis.indexSource(envelope.source).catch(() => null)
+    const indexedAt = performance.now()
+    const buffer = new SourceBuffer(envelope, indexed ? { map: indexed } : {})
+    const projectStarted = performance.now()
     const projected = projectDocument(buffer.map)
     const tiptap = toTiptapDocument(projected)
+    const outline = collectOutline(tiptap)
+    const projectMs = performance.now() - projectStarted
     const draft = await this.gateway.readDraft(opened.path).catch(() => null)
     const hasDraft = Boolean(draft && draft.source !== buffer.current)
 
@@ -254,7 +290,7 @@ export class AppStore {
       directory: dirname(opened.path),
       buffer,
       tiptap,
-      outline: collectOutline(tiptap),
+      outline,
       dirty: false,
       saveState: 'saved',
       ...(envelope.readOnlyReason ? { readOnly: envelope.readOnlyReason } : {}),
@@ -274,7 +310,17 @@ export class AppStore {
     this.bindBridge()
     await this.startWatching()
     this.updateTitle()
+    this.lastOpenMetrics = {
+      bytes: opened.bytes.byteLength,
+      blocks: buffer.map.roots.filter(root => root.kind !== 'gap').length,
+      decodeMs: decodedAt - openStarted,
+      indexMs: indexedAt - decodedAt,
+      projectMs,
+      totalMs: performance.now() - openStarted,
+      analysis: this.analysisMode,
+    }
     this.emit()
+    this.scheduleLocalAnalysis(0)
     void this.refreshGitDiff()
   }
 
@@ -375,6 +421,7 @@ export class AppStore {
       this.git = null
       this.gitError = null
       this.gitLoading = false
+      this.resetGitAnalysis()
       this.emit()
       return
     }
@@ -382,6 +429,7 @@ export class AppStore {
     const token = ++this.gitToken
     this.gitLoading = true
     this.gitError = null
+    this.resetGitAnalysis()
     this.emit()
     try {
       const snapshot = await this.gateway.readGitDiff(doc.path)
@@ -389,6 +437,7 @@ export class AppStore {
         return
       }
       this.git = snapshot
+      void this.analyzeGitBlocks(doc, snapshot, token)
     } catch (error) {
       if (token !== this.gitToken || this.doc !== doc) {
         return
@@ -408,6 +457,149 @@ export class AppStore {
     this.git = null
     this.gitLoading = false
     this.gitError = null
+    this.resetGitAnalysis()
+  }
+
+  private resetGitAnalysis(): void {
+    this.gitAnalysisToken += 1
+    this.gitBlocks = null
+    this.gitAnalysisLoading = false
+    this.gitAnalysisNote = null
+  }
+
+  private async analyzeGitBlocks(
+    doc: DocState,
+    snapshot: GitDiff,
+    token: number,
+  ): Promise<void> {
+    if (
+      snapshot.status === 'clean' ||
+      snapshot.status === 'not-repo' ||
+      snapshot.status === 'ignored' ||
+      snapshot.binary
+    ) {
+      return
+    }
+    if (!this.gateway.readGitVersions) {
+      this.gitAnalysisNote = '当前环境不支持块级 Git 分析。'
+      this.emit()
+      return
+    }
+
+    const analysisToken = this.gitAnalysisToken + 1
+    this.gitAnalysisToken = analysisToken
+    this.gitAnalysisLoading = true
+    this.emit()
+
+    try {
+      const versions: GitVersions = await this.gateway.readGitVersions(doc.path)
+      if (token !== this.gitToken || this.doc !== doc || analysisToken !== this.gitAnalysisToken) {
+        return
+      }
+      if (versions.headTooLarge || versions.worktreeTooLarge) {
+        this.gitAnalysisNote = '文件超过 8 MB，块级 Git 分析已跳过。'
+        return
+      }
+
+      const head = versions.headBytes ? decodeSource(versions.headBytes) : null
+      const worktree = versions.worktreeBytes ? decodeSource(versions.worktreeBytes) : null
+      if ((head && !head.lossless) || (worktree && !worktree.lossless)) {
+        this.gitAnalysisNote = 'Git 版本无法无损解码，块级摘要基于有损文本。'
+      }
+
+      const result = await this.analysis.analyzeBlocks(head?.source ?? '', worktree?.source ?? '')
+      if (token !== this.gitToken || this.doc !== doc || analysisToken !== this.gitAnalysisToken) {
+        return
+      }
+      this.gitBlocks = result
+    } catch {
+      if (token === this.gitToken && this.doc === doc && analysisToken === this.gitAnalysisToken) {
+        this.gitAnalysisNote = '块级 Git 分析不可用。'
+      }
+    } finally {
+      if (token === this.gitToken && this.doc === doc && analysisToken === this.gitAnalysisToken) {
+        this.gitAnalysisLoading = false
+        this.emit()
+      }
+    }
+  }
+
+  scheduleLocalAnalysis(delay = 500): void {
+    const doc = this.doc
+    if (!doc) {
+      return
+    }
+    if (this.localAnalysisTimer) {
+      clearTimeout(this.localAnalysisTimer)
+      this.localAnalysisTimer = null
+    }
+    if (doc.buffer.savedText === doc.buffer.current) {
+      const hadState =
+        this.localDiff !== null || this.localBlocks !== null || this.localAnalysisLoading
+      this.localAnalysisToken += 1
+      this.localDiff = null
+      this.localBlocks = null
+      this.localAnalysisLoading = false
+      if (hadState) {
+        this.emit()
+      }
+      return
+    }
+    this.localAnalysisTimer = setTimeout(() => {
+      this.localAnalysisTimer = null
+      void this.computeLocalAnalysis()
+    }, delay)
+  }
+
+  private async computeLocalAnalysis(): Promise<void> {
+    const doc = this.doc
+    if (!doc) {
+      return
+    }
+    const before = doc.buffer.savedText
+    const after = doc.buffer.current
+    if (before === after) {
+      this.localDiff = null
+      this.localBlocks = null
+      this.localAnalysisLoading = false
+      this.emit()
+      return
+    }
+
+    const token = this.localAnalysisToken + 1
+    this.localAnalysisToken = token
+    this.localAnalysisLoading = true
+    this.emit()
+
+    try {
+      const result = await this.analysis.analyzeSourceChanges(before, after)
+      if (token !== this.localAnalysisToken || this.doc !== doc) {
+        return
+      }
+      this.localDiff = result.preview
+      this.localBlocks = result.blocks
+    } catch {
+      if (token === this.localAnalysisToken && this.doc === doc) {
+        this.localDiff = null
+        this.localBlocks = null
+      }
+    } finally {
+      if (token === this.localAnalysisToken && this.doc === doc) {
+        this.localAnalysisLoading = false
+        this.emit()
+      }
+    }
+  }
+
+  private resetLocalAnalysis(): void {
+    if (this.localAnalysisTimer) {
+      clearTimeout(this.localAnalysisTimer)
+      this.localAnalysisTimer = null
+    }
+    this.localAnalysisToken += 1
+    this.localDiff = null
+    this.localBlocks = null
+    this.localAnalysisLoading = false
   }
 
   togglePanel(): void {
@@ -446,7 +638,6 @@ export class AppStore {
     this.doc.dirty = this.doc.buffer.dirty
     this.doc.saveState = this.doc.dirty ? 'dirty' : 'saved'
     this.doc.chars = this.doc.buffer.current.length
-    this.doc.words = countWords(this.doc.buffer.current)
     this.scheduleDraft()
     this.updateTitle()
     return !wasDirty && this.doc.dirty
@@ -461,6 +652,7 @@ export class AppStore {
     } else {
       this.scheduleMeta()
     }
+    this.scheduleLocalAnalysis()
   }
 
   applyProjection(json: JSONContent, hint?: SelectionHint): void {
@@ -518,6 +710,7 @@ export class AppStore {
         await this.gateway.deleteDraft(doc.path).catch(() => undefined)
         this.updateTitle()
         this.emit()
+        this.scheduleLocalAnalysis(0)
         void this.refreshGitDiff()
         return
       }
@@ -594,6 +787,7 @@ export class AppStore {
       await this.gateway.deleteDraft(doc.path).catch(() => undefined)
       this.updateTitle()
       this.emit()
+      this.scheduleLocalAnalysis(0)
       void this.refreshGitDiff()
       this.notify(`已用本地内容覆盖磁盘文件（${sha.slice(0, 12)}）。`)
     } catch (error) {
@@ -635,6 +829,7 @@ export class AppStore {
     this.mode = doc.readOnly ? 'source' : 'visual'
     this.updateTitle()
     this.emit()
+    this.scheduleLocalAnalysis(0)
     this.notify('已恢复草稿；保存后才会写回原文件。')
   }
 
@@ -714,13 +909,18 @@ export class AppStore {
 
   private scheduleMeta(): void {
     if (this.metaTimer) {
-      return
+      clearTimeout(this.metaTimer)
     }
     this.metaTimer = setTimeout(() => {
       this.metaTimer = null
-      if (this.doc && this.mode === 'visual' && this.editor) {
-        this.doc.outline = collectOutline(this.editor.getJSON())
+      const doc = this.doc
+      if (!doc) {
+        return
       }
+      if (this.mode === 'visual' && this.editor) {
+        doc.outline = collectOutline(this.editor.getJSON())
+      }
+      doc.words = countWords(doc.buffer.current)
       this.emit()
     }, 250)
   }

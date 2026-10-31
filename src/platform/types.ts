@@ -24,6 +24,7 @@ export type GitStatus =
   | 'staged'
   | 'untracked'
   | 'deleted'
+  | 'renamed'
   | 'ignored'
   | 'unborn'
   | 'not-repo'
@@ -54,6 +55,16 @@ export interface GitDiff {
   binary: boolean
   truncated: boolean
   message: string | null
+  renamedFrom?: string | null
+}
+
+/** HEAD and worktree bytes for block-level change classification. */
+export interface GitVersions {
+  headBytes: Uint8Array | null
+  worktreeBytes: Uint8Array | null
+  headTooLarge: boolean
+  worktreeTooLarge: boolean
+  renamedFrom: string | null
 }
 
 export interface DocumentGateway {
@@ -69,6 +80,8 @@ export interface DocumentGateway {
   deleteDraft(path: string): Promise<void>
   /** Read-only HEAD-vs-worktree diff for the file's repository. */
   readGitDiff?(path: string): Promise<GitDiff>
+  /** HEAD and worktree bytes used for block-level Git change summaries. */
+  readGitVersions?(path: string): Promise<GitVersions>
   /** Watches one document; resolves with a disposer. Save-time SHA checks remain authoritative. */
   watchDocument?(path: string, onChanged: () => void): Promise<() => void | Promise<void>>
   /** Registers an already-opened document, used by browser-only demo buffers. */

@@ -7,6 +7,7 @@ import type {
   DocumentGateway,
   Draft,
   GitDiff,
+  GitVersions,
   OpenedDocument,
   WorkspaceNode,
 } from './types.js'
@@ -15,6 +16,14 @@ interface DocumentResponse {
   path: string
   bytesBase64: string
   sha256: string
+}
+
+interface GitVersionsResponse {
+  headBase64: string | null
+  worktreeBase64: string | null
+  headTooLarge: boolean
+  worktreeTooLarge: boolean
+  renamedFrom: string | null
 }
 
 interface WorkspaceResponse {
@@ -110,6 +119,17 @@ export function createTauriGateway(): DocumentGateway {
 
     async readGitDiff(path: string): Promise<GitDiff> {
       return invoke<GitDiff>('read_git_diff', { path })
+    },
+
+    async readGitVersions(path: string): Promise<GitVersions> {
+      const result = await invoke<GitVersionsResponse>('read_git_versions', { path })
+      return {
+        headBytes: result.headBase64 ? decodeBase64(result.headBase64) : null,
+        worktreeBytes: result.worktreeBase64 ? decodeBase64(result.worktreeBase64) : null,
+        headTooLarge: result.headTooLarge,
+        worktreeTooLarge: result.worktreeTooLarge,
+        renamedFrom: result.renamedFrom,
+      }
     },
 
     async writeDraft(draft: Draft): Promise<void> {

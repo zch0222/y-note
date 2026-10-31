@@ -1,11 +1,10 @@
 import { useEditorState } from '@tiptap/react'
-import { useMemo } from 'react'
 
 import { selectionFromHint } from '../editor/bridge.js'
+import type { BlockAnalysis } from '../source/analysis.js'
 import type { GitDiff, GitStatus } from '../platform/types.js'
 import type { DocState } from '../state/store.js'
 import { useAppStore } from '../state/useStore.js'
-import { previewSourceDiff } from './diff.js'
 import { Icon } from './Icon.js'
 
 const GIT_STATUS_LABEL: Record<GitStatus, string> = {
@@ -14,6 +13,7 @@ const GIT_STATUS_LABEL: Record<GitStatus, string> = {
   staged: '已暂存',
   untracked: '未跟踪',
   deleted: '已删除',
+  renamed: '已重命名',
   ignored: '已忽略',
   unborn: '尚无提交',
   'not-repo': '非 Git 仓库',
@@ -89,13 +89,10 @@ function InspectorDocument({ doc }: { doc: DocState }) {
       },
     }) ?? -1
 
-  const diff = useMemo(
-    () => previewSourceDiff(doc.buffer.original, doc.buffer.current),
-    [doc.buffer.original, doc.buffer.current],
-  )
+  const diff = store.localDiff
   const git = store.git
-  const summaryAdded = store.diffSource === 'git' ? (git?.additions ?? 0) : diff.added
-  const summaryRemoved = store.diffSource === 'git' ? (git?.deletions ?? 0) : diff.removed
+  const summaryAdded = store.diffSource === 'git' ? (git?.additions ?? 0) : (diff?.added ?? 0)
+  const summaryRemoved = store.diffSource === 'git' ? (git?.deletions ?? 0) : (diff?.removed ?? 0)
   const blocks = doc.buffer.map.roots.filter(root => root.kind !== 'gap').length
   const issues = doc.buffer.map.issues.length
   const clean = issues === 0
@@ -205,12 +202,12 @@ function InspectorDocument({ doc }: { doc: DocState }) {
             </p>
             <div className="format-stats">
               <div className="format-stat">
-                <strong>{diff.added}</strong>
+                <strong>{diff?.added ?? 0}</strong>
                 <span>新增行</span>
               </div>
               <div className="format-stat">
-                <strong style={{ color: diff.removed > 0 ? 'var(--red)' : undefined }}>
-                  {diff.removed}
+                <strong style={{ color: (diff?.removed ?? 0) > 0 ? 'var(--red)' : undefined }}>
+                  {diff?.removed ?? 0}
                 </strong>
                 <span>移除行</span>
               </div>
@@ -321,16 +318,25 @@ function InspectorDocument({ doc }: { doc: DocState }) {
               loading={store.gitLoading}
               error={store.gitError}
               onRefresh={() => void store.refreshGitDiff()}
+              blocks={store.gitBlocks}
+              analysisLoading={store.gitAnalysisLoading}
+              analysisNote={store.gitAnalysisNote}
             />
           </>
         ) : (
           <>
             <div className="panel-heading">
               <span>源文件差异</span>
-              <span className="plain">{diff.changed ? '相对打开时基线' : '无改动'}</span>
+              <span className="plain">{diff?.changed ? '相对上次保存' : '无改动'}</span>
             </div>
 
-            {diff.changed ? (
+            <BlockAnalysisView
+              analysis={store.localBlocks}
+              loading={store.localAnalysisLoading}
+              note={null}
+            />
+
+            {diff?.changed ? (
               <div className="source-diff">
                 <div className="source-diff-head">
                   <span>{doc.name}</span>
@@ -357,7 +363,11 @@ function InspectorDocument({ doc }: { doc: DocState }) {
                 </div>
               </div>
             ) : (
-              <div className="panel-placeholder">当前缓冲区与打开时基线一致，没有未保存的源码改动。</div>
+              <div className="panel-placeholder">
+                {store.localAnalysisLoading
+                  ? '正在分析未保存改动…'
+                  : '当前缓冲区与上次保存的基线一致，没有未保存的源码改动。'}
+              </div>
             )}
           </>
         )}
@@ -448,11 +458,17 @@ function GitDiffView({
   loading,
   error,
   onRefresh,
+  blocks,
+  analysisLoading,
+  analysisNote,
 }: {
   git: GitDiff | null
   loading: boolean
   error: string | null
   onRefresh: () => void
+  blocks: BlockAnalysis | null
+  analysisLoading: boolean
+  analysisNote: string | null
 }) {
   if (loading && !git) {
     return <div className="panel-placeholder">正在读取 Git 差异…</div>
@@ -483,24 +499,6 @@ function GitDiffView({
     )
   }
 
-  if (git.status === 'untracked') {
-    return (
-      <div className="git-state">
-        <strong>文件尚未被 Git 跟踪</strong>
-        <span>执行 git add 后，这里会显示该文件与 HEAD 的差异。</span>
-      </div>
-    )
-  }
-
-  if (git.status === 'unborn') {
-    return (
-      <div className="git-state">
-        <strong>仓库尚无提交</strong>
-        <span>{git.message ?? '创建首个提交后，这里会显示可比基线。'}</span>
-      </div>
-    )
-  }
-
   if (git.status === 'ignored') {
     return (
       <div className="git-state">
@@ -514,12 +512,44 @@ function GitDiffView({
     return (
       <div className="git-state">
         <strong>二进制文件</strong>
-        <span>Git 将文件视为二进制，无法显示行级差异。</span>
+        <span>Git 将文件视为二进制，无法显示行级或块级差异。</span>
       </div>
     )
   }
 
-  if (git.hunks.length === 0) {
+  if (git.status === 'untracked') {
+    return (
+      <>
+        <div className="git-state">
+          <strong>文件尚未被 Git 跟踪</strong>
+          <span>执行 git add 后，这里会显示该文件与 HEAD 的差异。下面是相对空文件的块级摘要。</span>
+        </div>
+        <BlockAnalysisView
+          analysis={blocks}
+          loading={analysisLoading}
+          note={analysisNote}
+        />
+      </>
+    )
+  }
+
+  if (git.status === 'unborn') {
+    return (
+      <>
+        <div className="git-state">
+          <strong>仓库尚无提交</strong>
+          <span>{git.message ?? '创建首个提交后，这里会显示可比基线。'}</span>
+        </div>
+        <BlockAnalysisView
+          analysis={blocks}
+          loading={analysisLoading}
+          note={analysisNote}
+        />
+      </>
+    )
+  }
+
+  if (git.status === 'clean') {
     return (
       <div className="panel-placeholder">
         工作区与该文件的 HEAD 版本一致，没有未提交改动。
@@ -527,35 +557,144 @@ function GitDiffView({
     )
   }
 
+  if (git.status === 'renamed') {
+    return (
+      <>
+        <div className="git-state">
+          <strong>文件已重命名</strong>
+          <span>{git.message ?? '文件已重命名，内容未改变。'}</span>
+        </div>
+        <BlockAnalysisView analysis={blocks} loading={analysisLoading} note={analysisNote} />
+        <div className="panel-placeholder">
+          重命名文件的行级差异请用 git diff -M 查看；块级摘要基于 HEAD 旧路径。
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
-      <div className="git-diff">
-        {git.hunks.map((hunk, hunkIndex) => (
-          <div className="git-hunk" key={`${hunk.oldStart}-${hunk.newStart}-${hunkIndex}`}>
-            <div className="git-hunk-head">
-              @@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
+      {git.status === 'deleted' ? (
+        <div className="git-state">
+          <strong>文件已从工作区删除</strong>
+          <span>{git.message ?? '下面是删除前版本与空文件的差异；保存可重建该文件。'}</span>
+        </div>
+      ) : null}
+      <BlockAnalysisView
+        analysis={blocks}
+        loading={analysisLoading}
+        note={analysisNote}
+      />
+      {git.hunks.length === 0 ? (
+        <div className="panel-placeholder">与 HEAD 版本一致，没有行级差异。</div>
+      ) : (
+        <div className="git-diff">
+          {git.hunks.map((hunk, hunkIndex) => (
+            <div className="git-hunk" key={`${hunk.oldStart}-${hunk.newStart}-${hunkIndex}`}>
+              <div className="git-hunk-head">
+                @@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
+              </div>
+              <div className="diff-code">
+                {hunk.lines.map((line, lineIndex) => (
+                  <div
+                    className={`git-diff-line ${line.kind}`}
+                    key={`${line.oldLine ?? 'x'}-${line.newLine ?? 'x'}-${lineIndex}`}
+                  >
+                    <span className="line-no">{line.oldLine ?? ''}</span>
+                    <span className="line-no">{line.newLine ?? ''}</span>
+                    <span className="sign">
+                      {line.kind === 'removed' ? '−' : line.kind === 'added' ? '+' : ''}
+                    </span>
+                    <span className="line-text">{line.text === '' ? ' ' : line.text}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="diff-code">
-              {hunk.lines.map((line, lineIndex) => (
-                <div
-                  className={`git-diff-line ${line.kind}`}
-                  key={`${line.oldLine ?? 'x'}-${line.newLine ?? 'x'}-${lineIndex}`}
-                >
-                  <span className="line-no">{line.oldLine ?? ''}</span>
-                  <span className="line-no">{line.newLine ?? ''}</span>
-                  <span className="sign">
-                    {line.kind === 'removed' ? '−' : line.kind === 'added' ? '+' : ''}
-                  </span>
-                  <span className="line-text">{line.text === '' ? ' ' : line.text}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
       {git.truncated ? (
         <div className="panel-placeholder">差异过大，已截断显示；请用 git diff 查看完整内容。</div>
       ) : null}
     </>
+  )
+}
+
+function BlockAnalysisView({
+  analysis,
+  loading,
+  note,
+}: {
+  analysis: BlockAnalysis | null
+  loading: boolean
+  note: string | null
+}) {
+  if (!analysis) {
+    if (loading) {
+      return <div className="panel-placeholder">正在分析块级变更…</div>
+    }
+    return note ? <div className="panel-placeholder">{note}</div> : null
+  }
+
+  if (analysis.changes.length === 0) {
+    return note ? <div className="panel-placeholder">{note}</div> : null
+  }
+
+  const visible = analysis.changes.slice(0, 12)
+
+  return (
+    <div className="block-changes">
+      <div className="block-change-summary">
+        <span className="content">
+          <strong>{analysis.contentChanges}</strong> 处内容修改
+        </span>
+        <span className="format">
+          <strong>{analysis.formatChanges}</strong> 处格式改写
+        </span>
+        <span className="plain">{analysis.untouched} 块未改动</span>
+      </div>
+      <div className="block-change-list">
+        {visible.map((change, index) => {
+          const line = change.kind === 'added' ? change.newLine : change.oldLine
+          const lineLabel =
+            change.oldLine !== null &&
+            change.newLine !== null &&
+            change.oldLine !== change.newLine
+              ? `L${change.oldLine} → L${change.newLine}`
+              : `L${line ?? '?'}`
+          return (
+            <div
+              className={`block-change ${change.classification}`}
+              key={`${change.oldLine}-${change.newLine}-${index}`}
+            >
+              <span className="block-change-badge">
+                {change.classification === 'content' ? '内容' : '格式'}
+              </span>
+              <span className={`block-change-sign ${change.kind}`}>
+                {change.kind === 'added' ? '+' : change.kind === 'removed' ? '−' : '±'}
+              </span>
+              <div className="block-change-body">
+                <div className="block-change-head">
+                  <span className="block-change-kind">{change.label}</span>
+                  <span className="block-change-line">{lineLabel}</span>
+                </div>
+                <div className="block-change-detail" title={change.summary}>
+                  {change.detail}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {analysis.changes.length > visible.length ? (
+        <div className="panel-placeholder">
+          还有 {analysis.changes.length - visible.length} 处未显示。
+        </div>
+      ) : null}
+      {analysis.truncated ? (
+        <div className="panel-placeholder">变更过多，仅分析前 200 处。</div>
+      ) : null}
+      {note ? <div className="panel-placeholder">{note}</div> : null}
+    </div>
   )
 }

@@ -263,3 +263,143 @@ test('shows the Git diff view in browser preview without touching the document',
   await page.evaluate(() => window.__YNOTE_DEBUG__!.store.setDiffSource('local'))
   await expect(page.locator('.diff-source-switch button.active')).toHaveText('未保存改动')
 })
+
+test('types continuously through the incremental source patch path', async ({ page }) => {
+  await openDemo(page)
+  const before = (await source(page))!
+  await page.evaluate(() => window.__YNOTE_DEBUG__!.store.editor!.chain().focus('end').run())
+  await page.keyboard.type('ABC中文', { delay: 20 })
+  await expect.poll(() => source(page)).toContain('ABC中文')
+
+  const typed = (await source(page))!
+  const expected = `${before.replace(/\n$/, '')}ABC中文${before.endsWith('\n') ? '\n' : ''}`
+  expect(typed).toBe(expected)
+
+  const fastEdits = await page.evaluate(
+    () => window.__YNOTE_DEBUG__!.store.bridge?.fastEdits ?? 0,
+  )
+  expect(fastEdits).toBeGreaterThanOrEqual(3)
+  expect(
+    await page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.buffer.mapIssues.length),
+  ).toBe(0)
+  expect(await page.evaluate(() => window.__YNOTE_DEBUG__!.store.analysisMode)).toBe('worker')
+
+  await page.keyboard.press('Control+z')
+  await expect.poll(() => source(page)).toBe(before)
+  await page.evaluate(() => window.__YNOTE_DEBUG__!.store.editor!.commands.redo())
+  await expect.poll(() => source(page)).toBe(typed)
+
+  await page.keyboard.press('Control+s')
+  await expect
+    .poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.saveState))
+    .toBe('saved')
+  expect(await diskSource(page)).toBe(typed)
+})
+
+test('classifies block changes as content or format in the local diff panel', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await expect
+    .poll(() => page.evaluate(() => Boolean(window.__YNOTE_DEBUG__)))
+    .toBe(true)
+  await page.evaluate(() =>
+    window.__YNOTE_DEBUG__!.store.openDemo(
+      '# 标题\n\n**粗体**\n\n正文\n',
+      'block-analysis.md',
+    ),
+  )
+  await expect(page.locator('.ProseMirror')).toContainText('粗体')
+  await page.evaluate(() => {
+    const store = window.__YNOTE_DEBUG__!.store
+    store.setInspectorTab('diff')
+    store.setDiffSource('local')
+  })
+
+  await page.evaluate(() =>
+    window.__YNOTE_DEBUG__!.store.applySourceText('# 标题\n\n__粗体__\n\n正文\n'),
+  )
+  await expect
+    .poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.store.localBlocks?.formatChanges))
+    .toBe(1)
+  expect(
+    await page.evaluate(() => window.__YNOTE_DEBUG__!.store.localBlocks?.contentChanges),
+  ).toBe(0)
+  await expect(page.locator('.block-change.format')).toHaveCount(1)
+  await expect(page.locator('.block-change-summary')).toContainText('0 处内容修改')
+  await expect(page.locator('.block-change-summary')).toContainText('1 处格式改写')
+
+  await page.evaluate(() =>
+    window.__YNOTE_DEBUG__!.store.applySourceText('# 标题\n\n__粗体__\n\n正文已修改\n'),
+  )
+  await expect
+    .poll(() => page.evaluate(() => window.__YNOTE_DEBUG__!.store.localBlocks?.contentChanges))
+    .toBe(1)
+  await expect(page.locator('.block-change.content')).toHaveCount(1)
+  await expect(page.locator('.block-change-summary')).toContainText('1 处内容修改')
+})
+
+test('keeps offscreen blocks selectable, findable, and undoable under virtualization', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await expect
+    .poll(() => page.evaluate(() => Boolean(window.__YNOTE_DEBUG__)))
+    .toBe(true)
+  const blocks = Array.from({ length: 240 }, (_, index) =>
+    index % 20 === 0
+      ? `## Section ${index}\n\n\`\`\`ts\nconst value${index} = ${index}\n\`\`\``
+      : `Paragraph ${index} with **bold** text.`,
+  ).join('\n\n')
+  await page.evaluate(
+    text => window.__YNOTE_DEBUG__!.store.openDemo(`${text}\n`, 'virtual.md'),
+    blocks,
+  )
+  await expect(page.locator('.ProseMirror')).toBeVisible()
+
+  const virtualization = await page.evaluate(() => {
+    const pre = document.querySelector('.ProseMirror pre')
+    const paragraph = document.querySelector('.ProseMirror p')
+    return {
+      pre: pre ? getComputedStyle(pre).contentVisibility : null,
+      paragraph: paragraph ? getComputedStyle(paragraph).contentVisibility : null,
+      paragraphs: document.querySelectorAll('.ProseMirror p').length,
+      codeBlocks: document.querySelectorAll('.ProseMirror pre').length,
+    }
+  })
+  expect(virtualization.pre).toBe('auto')
+  expect(virtualization.paragraph).toBe('auto')
+  expect(virtualization.paragraphs).toBeGreaterThan(200)
+  expect(virtualization.codeBlocks).toBe(12)
+
+  await page.evaluate(() => {
+    const scroll = document.getElementById('editor-scroll')
+    if (scroll) {
+      scroll.scrollTop = scroll.scrollHeight
+    }
+  })
+  expect(
+    await page.evaluate(() => document.querySelector('.ProseMirror')?.textContent ?? ''),
+  ).toContain('Paragraph 10 with')
+
+  const before = (await source(page))!
+  await page.evaluate(() => {
+    const editor = window.__YNOTE_DEBUG__!.store.editor!
+    const size = editor.state.doc.content.size
+    editor.chain().focus().setTextSelection(Math.max(1, size - 2)).insertContent('X').run()
+  })
+  await expect.poll(() => source(page)).toContain('X')
+  expect((await source(page))!.length).toBe(before.length + 1)
+  expect(
+    await page.evaluate(() => window.__YNOTE_DEBUG__!.store.doc?.buffer.mapIssues.length),
+  ).toBe(0)
+
+  await page.evaluate(() => window.__YNOTE_DEBUG__!.store.editor!.commands.undo())
+  await expect.poll(() => source(page)).toBe(before)
+  expect(
+    await page.evaluate(() => {
+      const editor = window.__YNOTE_DEBUG__!.store.editor!
+      return editor.state.selection.from > 0 && editor.view.hasFocus()
+    }),
+  ).toBe(true)
+})

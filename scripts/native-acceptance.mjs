@@ -17,6 +17,15 @@ const FILE_D = path.join(DIR, 'picker.md')
 const FILE_IME = path.join(DIR, 'ime.md')
 const SUBDIR = path.join(DIR, 'sub')
 const FILE_INNER = path.join(SUBDIR, 'inner.md')
+const FILE_BLOCKS = path.join(DIR, 'blocks.md')
+const FILE_UNTRACKED = path.join(DIR, 'untracked.md')
+const FILE_STAGED = path.join(DIR, 'staged.md')
+const FILE_RENAME_OLD = path.join(DIR, 'rename-old.md')
+const FILE_RENAME_NEW = path.join(DIR, 'rename-new.md')
+const FILE_DELETED_TRACKED = path.join(DIR, 'gone.md')
+const FILE_BINARY = path.join(DIR, 'binary.bin')
+const FILE_GBK = path.join(DIR, 'gbk.md')
+const FILE_LARGE = path.join(DIR, 'large.md')
 
 const A_TEXT = '# 原生验收\n\n第一段。\n\n- [ ] 任务\n'
 const B_TEXT = '\uFEFF# BOM 标题\r\n\r\n第一段。\r\n\r\n第二段。'
@@ -55,8 +64,22 @@ function changedFiles() {
 }
 
 function checkpoint(message) {
-  git(['add', '-A'])
-  git(['commit', '-q', '-m', message])
+  let lastError = null
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      execFileSync('git', ['-C', DIR, 'add', '-A'], { encoding: 'utf8', stdio: 'pipe' })
+      execFileSync('git', ['-C', DIR, 'commit', '-q', '-m', message], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      })
+      return
+    } catch (error) {
+      lastError = error
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250)
+    }
+  }
+  const stderr = lastError?.stderr?.toString?.() ?? lastError?.message ?? 'git checkpoint failed'
+  throw new Error(stderr)
 }
 
 git(['init', '-q'])
@@ -407,6 +430,244 @@ try {
   )
   await undoCommand()
   await waitState({ dirty: false })
+
+  // 3d. Remaining Git states, block-level classification, and truncation.
+  const LARGE_BLOCKS = Array.from({ length: 300 }, (_, index) => `block ${index}`)
+  const LARGE_SEPARATOR = '\n'.repeat(10)
+  fs.writeFileSync(FILE_BLOCKS, '# Blocks\n\n**bold**\n\nfirst\n', 'utf8')
+  fs.writeFileSync(FILE_RENAME_OLD, '# Rename\n', 'utf8')
+  fs.writeFileSync(FILE_DELETED_TRACKED, '# Gone\n\ntracked\n', 'utf8')
+  fs.writeFileSync(
+    FILE_BINARY,
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]),
+  )
+  fs.writeFileSync(
+    FILE_GBK,
+    Buffer.from([0x23, 0x20, 0x47, 0x42, 0x4b, 0x0a, 0x0a, 0xd6, 0xd0, 0xce, 0xc4, 0x0a]),
+  )
+  fs.writeFileSync(FILE_LARGE, `${LARGE_BLOCKS.join(LARGE_SEPARATOR)}\n`, 'utf8')
+  checkpoint('git states base')
+
+  fs.writeFileSync(FILE_UNTRACKED, '# Untracked\n\nbody\n', 'utf8')
+  fs.writeFileSync(FILE_STAGED, '# Staged\n\nstaged body\n', 'utf8')
+  git(['add', 'staged.md'])
+  fs.writeFileSync(FILE_BLOCKS, '# Blocks\n\n__bold__\n\nsecond\n', 'utf8')
+  git(['mv', 'rename-old.md', 'rename-new.md'])
+  fs.writeFileSync(
+    FILE_BINARY,
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0e]),
+  )
+  fs.writeFileSync(
+    FILE_GBK,
+    Buffer.from([
+      0x23, 0x20, 0x47, 0x42, 0x4b, 0x0a, 0x0a, 0xd6, 0xd0, 0xce, 0xc4, 0xd0, 0xde, 0xb8, 0xc4,
+      0x0a,
+    ]),
+  )
+  fs.writeFileSync(
+    FILE_LARGE,
+    `${LARGE_BLOCKS.map((line, index) =>
+      index < 210 ? `${line} changed` : line,
+    ).join(LARGE_SEPARATOR)}\n`,
+    'utf8',
+  )
+
+  async function waitGitState(status) {
+    await page.waitForFunction(
+      expected => window.__YNOTE_DEBUG__?.store?.git?.status === expected,
+      status,
+      { timeout: 10_000 },
+    )
+  }
+
+  async function waitGitBlocks() {
+    await page.waitForFunction(
+      () =>
+        window.__YNOTE_DEBUG__?.store?.gitBlocks !== null ||
+        window.__YNOTE_DEBUG__?.store?.gitAnalysisNote !== null,
+      null,
+      { timeout: 15_000 },
+    )
+  }
+
+  async function showGitPanel() {
+    await page.evaluate(() => {
+      const store = window.__YNOTE_DEBUG__.store
+      store.setInspectorTab('diff')
+      store.setDiffSource('git')
+    })
+  }
+
+  await openPath(FILE_BLOCKS)
+  await waitEditorContains('Blocks')
+  await showGitPanel()
+  await waitGitState('modified')
+  await waitGitBlocks()
+  const blocksAnalysis = await page.evaluate(() => {
+    const store = window.__YNOTE_DEBUG__.store
+    return {
+      content: store.gitBlocks?.contentChanges,
+      format: store.gitBlocks?.formatChanges,
+      untouched: store.gitBlocks?.untouched,
+      contentRows: document.querySelectorAll('.block-change.content').length,
+      formatRows: document.querySelectorAll('.block-change.format').length,
+      summary: document.querySelector('.block-change-summary')?.textContent ?? '',
+    }
+  })
+  check(
+    'Git 块级分析区分内容与格式',
+    blocksAnalysis.content === 1 &&
+      blocksAnalysis.format === 1 &&
+      blocksAnalysis.untouched === 1,
+    JSON.stringify(blocksAnalysis),
+  )
+  check(
+    'Git 块级摘要渲染内容/格式条目',
+    blocksAnalysis.contentRows === 1 &&
+      blocksAnalysis.formatRows === 1 &&
+      blocksAnalysis.summary.includes('1 处内容修改') &&
+      blocksAnalysis.summary.includes('1 处格式改写'),
+    blocksAnalysis.summary,
+  )
+  const cliBlocks = git(['diff', '--numstat', 'HEAD', '--', 'blocks.md']).split('\t')
+  const panelBlocks = await page.evaluate(() => ({
+    additions: window.__YNOTE_DEBUG__.store.git?.additions,
+    deletions: window.__YNOTE_DEBUG__.store.git?.deletions,
+  }))
+  check(
+    '块级分析文件的 Git 行数与 CLI 一致',
+    panelBlocks.additions === Number(cliBlocks[0]) &&
+      panelBlocks.deletions === Number(cliBlocks[1]),
+    `${panelBlocks.additions}/${panelBlocks.deletions} vs ${cliBlocks[0]}/${cliBlocks[1]}`,
+  )
+
+  await openPath(FILE_UNTRACKED)
+  await waitEditorContains('Untracked')
+  await showGitPanel()
+  await waitGitState('untracked')
+  await waitGitBlocks()
+  const untracked = await page.evaluate(() => ({
+    changes: window.__YNOTE_DEBUG__.store.gitBlocks?.changes.length,
+    hunks: window.__YNOTE_DEBUG__.store.git?.hunks.length,
+    state: document.querySelector('.git-state')?.textContent ?? '',
+  }))
+  check(
+    '未跟踪文件显示空基线和块级新增',
+    untracked.hunks === 0 && (untracked.changes ?? 0) >= 2,
+    JSON.stringify(untracked),
+  )
+  check('未跟踪文件空态文案可见', untracked.state.includes('尚未被 Git 跟踪'))
+
+  await openPath(FILE_STAGED)
+  await waitEditorContains('Staged')
+  await showGitPanel()
+  await waitGitState('staged')
+  await waitGitBlocks()
+  const staged = await page.evaluate(() => ({
+    hunks: window.__YNOTE_DEBUG__.store.git?.hunks.length,
+    changes: window.__YNOTE_DEBUG__.store.gitBlocks?.contentChanges,
+    status: document.querySelector('.diff-summary .file-status')?.textContent ?? '',
+  }))
+  check(
+    '已暂存文件显示相对 HEAD 的差异与块级新增',
+    staged.hunks > 0 && (staged.changes ?? 0) >= 2,
+    JSON.stringify(staged),
+  )
+  check('已暂存状态文案正确', staged.status.includes('已暂存'), staged.status)
+
+  await openPath(FILE_RENAME_NEW)
+  await waitEditorContains('Rename')
+  await showGitPanel()
+  await waitGitState('renamed')
+  await waitGitBlocks()
+  const renamed = await page.evaluate(() => ({
+    from: window.__YNOTE_DEBUG__.store.git?.renamedFrom,
+    changes: window.__YNOTE_DEBUG__.store.gitBlocks?.changes.length,
+    state: document.querySelector('.git-state')?.textContent ?? '',
+  }))
+  check(
+    '重命名文件报告旧路径',
+    renamed.from === path.basename(FILE_RENAME_OLD),
+    JSON.stringify(renamed),
+  )
+  check('纯重命名不产生块级变更', renamed.changes === 0, JSON.stringify(renamed))
+  check('重命名状态文案可见', renamed.state.includes('已重命名'), renamed.state)
+
+  await openPath(FILE_DELETED_TRACKED)
+  await waitEditorContains('Gone')
+  fs.rmSync(FILE_DELETED_TRACKED)
+  await page.evaluate(() => window.__YNOTE_DEBUG__.store.refreshGitDiff())
+  await showGitPanel()
+  await waitGitState('deleted')
+  await waitGitBlocks()
+  const deleted = await page.evaluate(() => ({
+    changes: window.__YNOTE_DEBUG__.store.gitBlocks?.changes.length,
+    hunks: window.__YNOTE_DEBUG__.store.git?.hunks.length,
+    state: document.querySelector('.git-state')?.textContent ?? '',
+  }))
+  check(
+    '删除文件显示 HEAD 内容移除',
+    deleted.hunks > 0 && (deleted.changes ?? 0) >= 1,
+    JSON.stringify(deleted),
+  )
+  check('删除状态文案可见', deleted.state.includes('已从工作区删除'), deleted.state)
+
+  await openPath(FILE_BINARY)
+  await showGitPanel()
+  await waitGitState('modified')
+  const binary = await page.evaluate(() => ({
+    binary: window.__YNOTE_DEBUG__.store.git?.binary,
+    state: document.querySelector('.git-state')?.textContent ?? '',
+  }))
+  check('二进制文件被识别', binary.binary === true)
+  check('二进制文件空态可见', binary.state.includes('二进制文件'), binary.state)
+
+  await openPath(FILE_GBK)
+  await showGitPanel()
+  await waitGitState('modified')
+  await waitGitBlocks()
+  const gbk = await page.evaluate(() => ({
+    readOnly: Boolean(window.__YNOTE_DEBUG__.store.doc?.readOnly),
+    note: window.__YNOTE_DEBUG__.store.gitAnalysisNote,
+    content: window.__YNOTE_DEBUG__.store.gitBlocks?.contentChanges,
+  }))
+  check('非 UTF-8 文件以只读方式打开', gbk.readOnly === true)
+  check(
+    '非 UTF-8 Git 块级分析标注有损解码',
+    (gbk.note ?? '').includes('有损') && (gbk.content ?? 0) >= 1,
+    JSON.stringify(gbk),
+  )
+
+  await openPath(FILE_LARGE)
+  await showGitPanel()
+  await waitGitState('modified')
+  await waitGitBlocks()
+  await waitFor(async () =>
+    (await page.evaluate(() =>
+      [...document.querySelectorAll('.diff-panel .panel-placeholder')].some(node =>
+        (node.textContent ?? '').includes('差异过大'),
+      ),
+    )) === true,
+  )
+  const large = await page.evaluate(() => ({
+    hunks: window.__YNOTE_DEBUG__.store.git?.hunks.length,
+    gitTruncated: window.__YNOTE_DEBUG__.store.git?.truncated,
+    blockTruncated: window.__YNOTE_DEBUG__.store.gitBlocks?.truncated,
+    changes: window.__YNOTE_DEBUG__.store.gitBlocks?.changes.length,
+  }))
+  check(
+    '大差异在 200 个 hunk 处截断',
+    large.gitTruncated === true && large.hunks === 200,
+    JSON.stringify(large),
+  )
+  check(
+    '块级变更在 200 条处截断',
+    large.blockTruncated === true && large.changes === 200,
+    JSON.stringify(large),
+  )
+
+  checkpoint('git states')
+  check('Git 状态验收后检查点干净', gitStatus() === '')
 
   // 4. Draft stays outside the Git workspace.
   await openPath(FILE_C)

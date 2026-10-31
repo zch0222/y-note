@@ -1189,6 +1189,35 @@ export function buildSourceMap(source: string): SourceMap {
   return new SpanBuilder(source).build()
 }
 
+export interface SourceMapSnapshot {
+  source: string
+  roots: SourceSpan[]
+  issues: SourceMapIssue[]
+}
+
+export function sourceMapSnapshot(map: SourceMap): SourceMapSnapshot {
+  return { source: map.source, roots: map.roots, issues: map.issues }
+}
+
+export function sourceMapFromSnapshot(snapshot: SourceMapSnapshot): SourceMap {
+  const byId = new Map<string, SourceSpan>()
+  const visit = (span: SourceSpan) => {
+    byId.set(span.id, span)
+    for (const child of span.children ?? []) {
+      visit(child)
+    }
+  }
+  for (const root of snapshot.roots) {
+    visit(root)
+  }
+  return {
+    source: snapshot.source,
+    roots: snapshot.roots,
+    byId,
+    issues: snapshot.issues,
+  }
+}
+
 export function* walkSpans(roots: SourceSpan[]): Generator<SourceSpan> {
   function* walk(span: SourceSpan): Generator<SourceSpan> {
     yield span

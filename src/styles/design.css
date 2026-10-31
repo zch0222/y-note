@@ -320,6 +320,23 @@
     .git-state { border: 1px solid var(--line); border-radius: 9px; background: var(--paper); padding: 14px; color: var(--muted); font-size: 9.5px; line-height: 1.7; margin-bottom: 18px; }
     .git-state strong { display: block; color: var(--text-soft); font-size: 10.5px; margin-bottom: 4px; }
     .git-state .button { margin-top: 10px; height: 27px; }
+    .block-changes { border: 1px solid var(--line); border-radius: 9px; background: var(--paper); margin-bottom: 18px; overflow: hidden; }
+    .block-change-summary { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 8.5px; color: var(--muted); }
+    .block-change-summary .content strong { color: var(--amber); }
+    .block-change-summary .format strong { color: var(--accent); }
+    .block-change-summary .plain { margin-left: auto; font-size: 8px; color: var(--faint); }
+    .block-change { display: grid; grid-template-columns: auto 14px 1fr; gap: 7px; align-items: start; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+    .block-change:last-child { border-bottom: 0; }
+    .block-change-badge { font-size: 7.5px; padding: 1px 5px; border-radius: 4px; line-height: 1.6; white-space: nowrap; }
+    .block-change.content .block-change-badge { color: var(--amber); background: var(--amber-soft); }
+    .block-change.format .block-change-badge { color: var(--accent); background: var(--accent-soft); }
+    .block-change-sign { font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; text-align: center; color: var(--muted); }
+    .block-change-sign.added { color: var(--green); }
+    .block-change-sign.removed { color: var(--red); }
+    .block-change-head { display: flex; align-items: baseline; gap: 6px; }
+    .block-change-kind { font-size: 9px; font-weight: 600; color: var(--text-soft); }
+    .block-change-line { font-size: 7.5px; color: var(--faint); font-family: "SFMono-Regular", Consolas, monospace; }
+    .block-change-detail { margin-top: 2px; font-size: 8.5px; color: var(--muted); overflow-wrap: anywhere; }
     .verify-list { border: 1px solid var(--line); border-radius: 9px; background: var(--paper); padding: 6px 12px; margin-bottom: 18px; }
     .verify-row { display: flex; align-items: center; gap: 8px; min-height: 34px; border-bottom: 1px solid var(--line); font-size: 9.5px; color: var(--text-soft); }
     .verify-row:last-child { border-bottom: 0; }

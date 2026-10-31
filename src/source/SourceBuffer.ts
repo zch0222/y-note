@@ -25,6 +25,8 @@ interface HistoryEntry {
 
 export interface SourceBufferOptions {
   level?: PatchLevel
+  /** Prebuilt index, usually produced in a worker, to keep opening off the main thread. */
+  map?: SourceMap
 }
 
 export class SourceBuffer {
@@ -39,18 +41,26 @@ export class SourceBuffer {
   private baseline: string
   private baselineSha: string
 
-  constructor(envelope: FileEnvelope) {
+  constructor(envelope: FileEnvelope, options: SourceBufferOptions = {}) {
     this.envelope = envelope
     this.original = envelope.source
     this.text = envelope.source
     this.baseline = envelope.source
     this.baselineSha = envelope.originalSha256
-    this.sourceMap = buildSourceMap(envelope.source)
+    this.sourceMap =
+      options.map && options.map.source === envelope.source
+        ? options.map
+        : buildSourceMap(envelope.source)
     this.rootCounter = this.computeNextRootId(this.sourceMap.roots)
   }
 
   get current(): string {
     return this.text
+  }
+
+  /** Last content that was saved or opened; the basis for "unsaved changes". */
+  get savedText(): string {
+    return this.baseline
   }
 
   get revision(): number {
@@ -208,6 +218,7 @@ export class SourceBuffer {
     const newRegionEnd = regionEnd + delta
     const oldAffected = oldRoots.slice(regionFromIndex, regionToIndex + 1)
     const local = buildSourceMap(after.slice(regionStart, newRegionEnd))
+    this.assertValid(local)
     const newRoots: SourceSpan[] = []
 
     for (let index = 0; index < local.roots.length; index += 1) {
@@ -218,21 +229,57 @@ export class SourceBuffer {
     }
 
     const roots: SourceSpan[] = [
-      ...oldRoots.slice(0, regionFromIndex).map(root => cloneShifted(root, 0)),
+      ...oldRoots.slice(0, regionFromIndex),
       ...newRoots,
-      ...oldRoots.slice(regionToIndex + 1).map(root => cloneShifted(root, delta)),
+      ...oldRoots.slice(regionToIndex + 1),
     ]
+
+    if (delta !== 0) {
+      for (let index = regionFromIndex + newRoots.length; index < roots.length; index += 1) {
+        shiftInPlace(roots[index]!, delta)
+      }
+    }
+
+    // Only the edited region is rebuilt; keep the global index in place so a
+    // keystroke costs work proportional to the changed block, not the document.
+    const byId = this.sourceMap.byId
+    for (const root of oldAffected) {
+      for (const span of walkSpans([root])) {
+        byId.delete(span.id)
+      }
+    }
+    for (const root of newRoots) {
+      for (const span of walkSpans([root])) {
+        byId.set(span.id, span)
+      }
+    }
 
     const map: SourceMap = {
       source: after,
       roots,
-      byId: indexRoots(roots),
+      byId,
       issues: local.issues,
     }
 
-    this.assertValid(map)
-    this.rootCounter = Math.max(this.rootCounter, this.computeNextRootId(roots))
+    this.assertAssembled(map)
     return map
+  }
+
+  private assertAssembled(map: SourceMap): void {
+    let cursor = 0
+    for (const root of map.roots) {
+      if (root.start !== cursor) {
+        throw new Error(
+          `SourceBuffer rebuild produced a root gap at ${root.start}, expected ${cursor}`,
+        )
+      }
+      cursor = root.end
+    }
+    if (cursor !== map.source.length) {
+      throw new Error(
+        `SourceBuffer rebuild covered ${cursor} of ${map.source.length} characters`,
+      )
+    }
   }
 
   private assertValid(map: SourceMap): void {
@@ -305,13 +352,32 @@ function rootIndexesForEdit(
   let from = -1
   let to = -1
 
+  if (edit.from === edit.to) {
+    // An insertion exactly on a root boundary belongs to the adjacent content
+    // block, never to a whitespace gap, so the block is not split in two.
+    let index = roots.findIndex(
+      root => root.start <= edit.from && edit.from < root.end,
+    )
+    if (index === -1) {
+      index = roots.length - 1
+    }
+    const root = roots[index]
+    if (root?.kind === 'gap' && root.start === edit.from && index > 0) {
+      const previous = roots[index - 1]!
+      if (previous.kind !== 'gap') {
+        index -= 1
+      }
+    }
+    return index === -1
+      ? { from: -1, to: -1 }
+      : { from: index, to: index }
+  }
+
   for (let index = 0; index < roots.length; index += 1) {
     const root = roots[index]!
-    const containsInsertionPoint =
-      edit.from === edit.to && root.start <= edit.from && edit.from < root.end
-    const intersects = root.end > edit.from && root.start < Math.max(edit.to, edit.from + 1)
+    const intersects = root.end > edit.from && root.start < edit.to
 
-    if (containsInsertionPoint || intersects) {
+    if (intersects) {
       if (from === -1) {
         from = index
       }
@@ -327,18 +393,14 @@ function rootIndexesForEdit(
   return { from, to }
 }
 
-function cloneShifted(span: SourceSpan, delta: number): SourceSpan {
-  if (delta === 0) {
-    return span
-  }
+function shiftInPlace(span: SourceSpan, delta: number): void {
+  span.start += delta
+  span.end += delta
+  span.contentStart += delta
+  span.contentEnd += delta
 
-  return {
-    ...span,
-    start: span.start + delta,
-    end: span.end + delta,
-    contentStart: span.contentStart + delta,
-    contentEnd: span.contentEnd + delta,
-    children: span.children?.map(child => cloneShifted(child, delta)),
+  for (const child of span.children ?? []) {
+    shiftInPlace(child, delta)
   }
 }
 
@@ -371,12 +433,4 @@ function shiftAndReprefix(
   for (const child of span.children ?? []) {
     shiftAndReprefix(child, delta, localRootId, finalRootId)
   }
-}
-
-function indexRoots(roots: SourceSpan[]): Map<string, SourceSpan> {
-  const index = new Map<string, SourceSpan>()
-  for (const span of walkSpans(roots)) {
-    index.set(span.id, span)
-  }
-  return index
 }

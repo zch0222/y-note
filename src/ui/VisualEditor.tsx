@@ -34,6 +34,7 @@ export function VisualEditor({ doc }: { doc: DocState }) {
     {
       extensions,
       content: displayDocument(doc.tiptap),
+      shouldRerenderOnTransaction: false,
       editorProps: {
         attributes: {
           class: 'ProseMirror ynote-prose',

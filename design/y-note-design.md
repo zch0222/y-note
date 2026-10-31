@@ -233,6 +233,7 @@ Tauri 2 capability 按最小权限开放。前端没有任意路径读写能力�
 - 保存主线程序列化成本与修改范围相关，而不是与全文长度相关。
 - Markdown 源索引与 Diff 在 Web Worker 中执行；ProseMirror 视图和 DOM 仍在主线程。
 - 大文档只虚拟化昂贵 NodeView 的视觉效果，保留完整 PM 文档、选区、查找和撤销语义；焦点、选区、查找命中附近禁止卸载。
+- 实现采用 `content-visibility: auto` 与 `contain-intrinsic-size`：离屏块跳过布局和绘制，但 DOM 与 ProseMirror 节点完整保留，不删除可被查找或选中的内容。Windows 实测结果见 `PROGRESS.md`。
 - 图片懒解码，代码高亮按可视块调度；React 不为每个字符创建组件。
 - 连续输入期间 Diff 延迟 500 ms 合并计算，Git 状态与文件监听事件去抖。
 - Windows / macOS / Linux 分别跑长文档输入、IME、撤销、保存和文件竞争测试；中文 IME composition 期间不重映射选区。

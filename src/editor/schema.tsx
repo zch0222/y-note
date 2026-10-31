@@ -329,7 +329,11 @@ export function createEditorExtensions(callbacks: EditorCommandCallbacks): Exten
     RawInline,
     FrontMatter,
     LinkReferenceDefinition,
-    Image.configure({ inline: true, allowBase64: true }),
+    Image.configure({
+      inline: true,
+      allowBase64: true,
+      HTMLAttributes: { loading: 'lazy', decoding: 'async' },
+    }),
     Table.configure({ resizable: false }),
     TableRow,
     TableHeader,

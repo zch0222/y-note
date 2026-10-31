@@ -373,6 +373,20 @@
   margin: 1.3em 0;
 }
 
+/* Visual virtualization keeps the ProseMirror document and DOM intact while
+   expensive offscreen block visuals skip layout and paint. */
+.ProseMirror.ynote-prose > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 40px;
+}
+
+.ynote-prose pre,
+.ynote-prose .tableWrapper,
+.ynote-prose .raw-block-wrap {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
+}
+
 .ynote-prose table {
   border-collapse: collapse;
   width: 100%;
