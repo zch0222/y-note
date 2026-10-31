@@ -6,7 +6,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
+
+use crate::scope::PathScope;
 
 #[derive(Debug, Serialize)]
 pub struct ApiError {
@@ -82,7 +84,11 @@ fn unique_suffix() -> u128 {
 }
 
 #[tauri::command]
-pub fn read_document(path: String) -> Result<DocumentBytes, ApiError> {
+pub fn read_document(
+    path: String,
+    scope: State<'_, PathScope>,
+) -> Result<DocumentBytes, ApiError> {
+    scope.require(Path::new(&path))?;
     let bytes = fs::read(&path).map_err(|error| ApiError::io("Could not read document", error))?;
     Ok(DocumentBytes {
         path,
@@ -92,7 +98,8 @@ pub fn read_document(path: String) -> Result<DocumentBytes, ApiError> {
 }
 
 #[tauri::command]
-pub fn hash_file(path: String) -> Result<Option<String>, ApiError> {
+pub fn hash_file(path: String, scope: State<'_, PathScope>) -> Result<Option<String>, ApiError> {
+    scope.require(Path::new(&path))?;
     Ok(read_optional(Path::new(&path))?.map(|bytes| digest_hex(&bytes)))
 }
 
@@ -185,7 +192,9 @@ pub fn write_document_atomic(
     path: String,
     bytes_base64: String,
     expected_sha256: String,
+    scope: State<'_, PathScope>,
 ) -> Result<WriteOutcome, ApiError> {
+    scope.require(Path::new(&path))?;
     let bytes = STANDARD
         .decode(&bytes_base64)
         .map_err(|error| ApiError::new("invalid-payload", error.to_string()))?;

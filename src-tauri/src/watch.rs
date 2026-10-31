@@ -6,6 +6,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::document::ApiError;
+use crate::scope::PathScope;
 
 pub const DOCUMENT_CHANGED_EVENT: &str = "ynote://document-changed";
 
@@ -82,8 +83,10 @@ where
 pub fn watch_document(
     app: AppHandle,
     state: State<'_, WatchState>,
+    scope: State<'_, PathScope>,
     path: String,
 ) -> Result<(), ApiError> {
+    scope.require(Path::new(&path))?;
     let (target, parent) = normalize_target(Path::new(&path)).ok_or_else(|| {
         ApiError::new(
             "watch-failed",

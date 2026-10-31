@@ -51,7 +51,7 @@ async function waitFor(fn, timeout = 10_000, interval = 100) {
   throw new Error(`Timed out after ${timeout} ms; last value: ${JSON.stringify(last)}`)
 }
 
-async function connect() {
+async function connect(root) {
   const browser = await chromium.connectOverCDP('http://127.0.0.1:9222')
   const context = browser.contexts()[0] ?? (await browser.newContext())
   const page = context.pages().find(candidate => candidate.url().includes('localhost:1420'))
@@ -97,6 +97,15 @@ async function connect() {
   await page.waitForFunction(() => !window.__YNOTE_DEBUG__?.store?.editor, null, {
     timeout: 15_000,
   })
+  if (root) {
+    await page.evaluate(async target => {
+      const gateway = window.__YNOTE_DEBUG__?.store?.gateway
+      if (!gateway?.authorizeTestRoot) {
+        throw new Error('Debug path scope is unavailable')
+      }
+      await gateway.authorizeTestRoot(target)
+    }, root)
+  }
   return { browser, page }
 }
 
@@ -140,7 +149,7 @@ if (mode === 'prepare') {
   execFileSync('git', ['-C', repo, 'add', '-A'])
   execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'initial'])
 
-  const { browser, page } = await connect()
+  const { browser, page } = await connect(repo)
   try {
     const opened = await openFile(page, file)
     await page.waitForFunction(
@@ -190,7 +199,7 @@ if (mode === 'prepare') {
   }
   const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'))
   const { repo, file, original, expected, draftFile } = saved
-  const { browser, page } = await connect()
+  const { browser, page } = await connect(repo)
   try {
     const opened = await openFile(page, file)
     check('重启后检测到草稿', Boolean(opened.draft?.includes(DRAFT_EDIT)))

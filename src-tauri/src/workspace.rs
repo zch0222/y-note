@@ -2,8 +2,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use tauri::State;
 
 use crate::document::ApiError;
+use crate::scope::PathScope;
 
 const MAX_DEPTH: usize = 12;
 const MAX_ENTRIES: usize = 5000;
@@ -106,7 +108,8 @@ fn read_children(
 }
 
 #[tauri::command]
-pub fn list_workspace(root: String) -> Result<WorkspaceNode, ApiError> {
+pub fn list_workspace(root: String, scope: State<'_, PathScope>) -> Result<WorkspaceNode, ApiError> {
+    scope.require(Path::new(&root))?;
     let path = PathBuf::from(&root);
     if !path.is_dir() {
         return Err(ApiError::new("not-a-directory", "Workspace is not a directory"));

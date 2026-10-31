@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { open } from '@tauri-apps/plugin-dialog'
 
 import { sha256 } from '../source/encoding.js'
 import type {
@@ -65,28 +64,13 @@ export function createTauriGateway(): DocumentGateway {
     kind: 'tauri',
 
     async openFile(): Promise<OpenedDocument | null> {
-      const selection = await open({
-        multiple: false,
-        directory: false,
-        filters: [
-          {
-            name: 'Markdown',
-            extensions: ['md', 'markdown', 'mdown', 'mkd', 'txt'],
-          },
-        ],
-      })
-      if (typeof selection !== 'string') {
-        return null
-      }
-      return this.readDocument(selection)
+      const path = await invoke<string | null>('pick_document')
+      return path ? this.readDocument(path) : null
     },
 
     async openWorkspace(): Promise<WorkspaceNode | null> {
-      const selection = await open({ multiple: false, directory: true })
-      if (typeof selection !== 'string') {
-        return null
-      }
-      return this.readWorkspace(selection)
+      const path = await invoke<string | null>('pick_workspace')
+      return path ? this.readWorkspace(path) : null
     },
 
     async readWorkspace(root: string): Promise<WorkspaceNode> {
@@ -142,6 +126,14 @@ export function createTauriGateway(): DocumentGateway {
 
     async deleteDraft(path: string): Promise<void> {
       await invoke('delete_draft', { path })
+    },
+
+    async openExternal(url: string): Promise<void> {
+      await invoke('open_external', { url })
+    },
+
+    async authorizeTestRoot(root: string): Promise<void> {
+      await invoke('authorize_test_root', { path: root })
     },
 
     async watchDocument(path: string, onChanged: () => void): Promise<() => Promise<void>> {

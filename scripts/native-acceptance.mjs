@@ -158,6 +158,36 @@ await page.waitForFunction(() => !window.__YNOTE_DEBUG__?.store?.editor, null, {
   timeout: 15_000,
 })
 
+const testScope = await page.evaluate(async root => {
+  const gateway = window.__YNOTE_DEBUG__?.store?.gateway
+  if (!gateway?.authorizeTestRoot) {
+    return 'unsupported'
+  }
+  await gateway.authorizeTestRoot(root)
+  return 'ok'
+}, DIR)
+check('原生验收调试路径范围已授权', testScope === 'ok', testScope)
+
+const outsideFile = path.join(os.tmpdir(), `y-note-outside-${Date.now()}.md`)
+fs.writeFileSync(outsideFile, '# outside\n', 'utf8')
+const outsideResult = await page.evaluate(async target => {
+  try {
+    await window.__YNOTE_DEBUG__.store.gateway.readDocument(target)
+    return { code: 'allowed' }
+  } catch (error) {
+    return {
+      code: error?.code ?? null,
+      message: error?.message ?? String(error),
+    }
+  }
+}, outsideFile)
+check(
+  '未授权路径被 Rust 路径范围拒绝',
+  outsideResult.code === 'not-authorized',
+  JSON.stringify(outsideResult),
+)
+fs.unlinkSync(outsideFile)
+
 async function openPath(file) {
   return page.evaluate(async target => {
     const api = window.__YNOTE_DEBUG__
@@ -740,8 +770,8 @@ try {
   const localSource = (await state()).source
   check('本地修改仍在缓冲区', localSource.includes('本地修改'))
 
-  page.once('dialog', dialog => dialog.accept())
-  await page.locator('.notice-danger').getByRole('button', { name: '保留本地' }).click()
+  await page.locator('.notice-danger').getByRole('button', { name: '保留我的草稿' }).click()
+  await page.locator('.confirm-modal').getByRole('button', { name: '覆盖磁盘' }).click()
   await waitState({ dirty: false, external: 'none', saveState: 'saved' })
   check('保留本地覆盖磁盘', fs.readFileSync(FILE_A, 'utf8') === localSource)
 
@@ -755,8 +785,8 @@ try {
   await waitState({ external: 'conflict' })
   check('文件缺失时保存不重建', !fs.existsSync(FILE_C))
 
-  page.once('dialog', dialog => dialog.accept())
-  await page.locator('.notice-danger').getByRole('button', { name: '保留本地' }).click()
+  await page.locator('.notice-danger').getByRole('button', { name: '保留我的草稿' }).click()
+  await page.locator('.confirm-modal').getByRole('button', { name: '覆盖磁盘' }).click()
   await waitState({ dirty: false, external: 'none', saveState: 'saved' })
   check('保留本地重建被删除文件', fs.existsSync(FILE_C))
   check('重建内容为本地缓冲区', fs.readFileSync(FILE_C, 'utf8').includes('本地保留'))
@@ -870,6 +900,154 @@ try {
   await waitFor(async () => (await state()).saveState === 'error', 8000)
   check('只读文件保存失败且原文件不变', sha(fs.readFileSync(FILE_A)) === sha(readOnlyBytes))
   fs.chmodSync(FILE_A, 0o666)
+  await page.evaluate(() => window.__YNOTE_DEBUG__.save())
+  await waitState({ dirty: false, saveState: 'saved' })
+  check('恢复写权限后可保存只读尝试', fs.readFileSync(FILE_A, 'utf8').includes('只读尝试'))
+
+  // 10. M3: window chrome, palette, settings, print, security and 200% zoom.
+  await openPath(FILE_A)
+  await waitEditorContains('本地修改')
+  check(
+    '自定义标题栏使用原生拖拽区域',
+    (await page.locator('.titlebar[data-tauri-drag-region]').count()) === 1 &&
+      (await page.locator('.title-left[data-tauri-drag-region]').count()) === 1,
+  )
+  check(
+    'Windows 标题栏包含最小化/最大化/关闭',
+    (await page.getByRole('button', { name: '最小化窗口' }).count()) === 1 &&
+      (await page.getByRole('button', { name: '最大化窗口' }).count()) === 1 &&
+      (await page.getByRole('button', { name: '关闭窗口' }).count()) === 1,
+  )
+
+  await page.getByRole('button', { name: '最大化窗口' }).click()
+  await waitFor(
+    async () =>
+      (await page.evaluate(() =>
+        window.__TAURI_INTERNALS__.invoke('plugin:window|is_maximized', { label: 'main' }),
+      )) === true,
+  )
+  check('最大化按钮改变原生窗口状态', true)
+  await page.getByRole('button', { name: '还原窗口' }).click()
+  await waitFor(
+    async () =>
+      (await page.evaluate(() =>
+        window.__TAURI_INTERNALS__.invoke('plugin:window|is_maximized', { label: 'main' }),
+      )) === false,
+  )
+  check('还原按钮恢复原生窗口状态', true)
+
+  await page.keyboard.press('Control+k')
+  await waitFor(async () => (await page.locator('.palette-modal').count()) === 1)
+  check('命令面板可在原生窗口打开', await page.locator('.palette-modal').isVisible())
+  await page.getByRole('combobox', { name: '搜索命令' }).fill('设置')
+  await page.keyboard.press('Enter')
+  await waitFor(async () => (await page.locator('.settings-modal').count()) === 1)
+  check('命令面板可打开设置', await page.locator('.settings-modal').isVisible())
+  await page.getByRole('radio', { name: /^深色/ }).check()
+  check(
+    '设置切换深色主题',
+    (await page.evaluate(() => document.documentElement.dataset.theme)) === 'dark',
+  )
+  await page.getByRole('checkbox', { name: /减少界面动画/ }).check()
+  check(
+    '设置写入减少动效偏好',
+    (await page.evaluate(() => document.documentElement.dataset.motion)) === 'reduced',
+  )
+  await page.keyboard.press('Escape')
+  await waitFor(async () => (await page.locator('.settings-modal').count()) === 0)
+
+  const beforePrint = sha(fs.readFileSync(FILE_A))
+  const printed = await page.evaluate(async () => {
+    const original = window.print
+    window.__YNOTE_M3_PRINTED__ = null
+    window.print = () => {
+      window.__YNOTE_M3_PRINTED__ = document.querySelector('.print-document')?.textContent ?? ''
+    }
+    try {
+      await window.__YNOTE_DEBUG__.store.printDocument()
+      return window.__YNOTE_M3_PRINTED__
+    } finally {
+      window.print = original
+    }
+  })
+  check('原生打印生成文档内容', String(printed).includes('本地修改'))
+  check('打印不写回源文件', sha(fs.readFileSync(FILE_A)) === beforePrint)
+  check(
+    '打印结束后移除打印视图',
+    (await page.locator('.print-root').count()) === 0,
+  )
+
+  const deniedCommand = await page.evaluate(async () => {
+    try {
+      await window.__TAURI_INTERNALS__.invoke('plugin:window|is_decorated', { label: 'main' })
+      return 'allowed'
+    } catch (error) {
+      return String(error)
+    }
+  })
+  check('capability 未列出的 window 命令被拒绝', deniedCommand !== 'allowed', deniedCommand)
+
+  const badExternal = await page.evaluate(async () => {
+    try {
+      await window.__YNOTE_DEBUG__.store.gateway.openExternal(
+        'file:///C:/Windows/System32/calc.exe',
+      )
+      return 'allowed'
+    } catch (error) {
+      return error?.code ?? String(error)
+    }
+  })
+  check('Rust 外部链接策略拒绝 file:// URL', badExternal === 'unsupported-scheme', badExternal)
+
+  const zoomCdp = await context.newCDPSession(page)
+  await zoomCdp.send('Emulation.setDeviceMetricsOverride', {
+    width: 720,
+    height: 450,
+    deviceScaleFactor: 2,
+    mobile: false,
+  })
+  await new Promise(resolve => setTimeout(resolve, 300))
+  const zoomLayout = await page.evaluate(() => ({
+    width: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    editorWidth: document.querySelector('.editor-pane').getBoundingClientRect().width,
+    sidebar: getComputedStyle(document.querySelector('.file-sidebar')).display,
+    inspector: document.querySelector('#inspector')
+      ? getComputedStyle(document.querySelector('#inspector')).display
+      : 'absent',
+  }))
+  check('200% 缩放等效视口无横向溢出', zoomLayout.scrollWidth <= zoomLayout.width + 1)
+  check('200% 缩放下编辑器宽度有效', zoomLayout.editorWidth > 600, String(zoomLayout.editorWidth))
+  check('200% 缩放收起文件栏与上下文面板', zoomLayout.sidebar === 'none')
+  check(
+    '200% 缩放下上下文面板不可见',
+    zoomLayout.inspector === 'none' || zoomLayout.inspector === 'absent',
+  )
+  await page.keyboard.press('Control+k')
+  await waitFor(async () => (await page.locator('.palette-modal').count()) === 1)
+  const paletteBox = await page.locator('.palette-modal').boundingBox()
+  check(
+    '200% 缩放下命令面板不超出视口',
+    paletteBox.width <= 720 && paletteBox.height <= 450,
+    JSON.stringify(paletteBox),
+  )
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Control+s')
+  await waitState({ saveState: 'saved' })
+  check('200% 缩放下仍可保存', sha(fs.readFileSync(FILE_A)) === beforePrint)
+  await zoomCdp.send('Emulation.clearDeviceMetricsOverride')
+  await new Promise(resolve => setTimeout(resolve, 300))
+
+  await page.evaluate(() => {
+    const store = window.__YNOTE_DEBUG__.store
+    store.setThemePreference('system')
+    store.setMotionPreference('system')
+  })
+  check(
+    'M3 设置可恢复系统偏好',
+    (await page.evaluate(() => document.documentElement.dataset.motion)) === 'system',
+  )
+
   console.log(`\nArtifacts: ${DIR}`)
 } catch (error) {
   failed = true

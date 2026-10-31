@@ -4,8 +4,10 @@ use std::process::{Command, Output};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::Serialize;
+use tauri::State;
 
 use crate::document::ApiError;
+use crate::scope::PathScope;
 
 const MAX_PATCH_BYTES: usize = 4 * 1024 * 1024;
 const MAX_HUNKS: usize = 200;
@@ -320,7 +322,12 @@ fn limited_patch(stdout: &[u8]) -> (String, bool) {
 }
 
 #[tauri::command]
-pub fn read_git_diff(path: String) -> Result<GitDiff, ApiError> {
+pub fn read_git_diff(path: String, scope: State<'_, PathScope>) -> Result<GitDiff, ApiError> {
+    scope.require(Path::new(&path))?;
+    read_git_diff_inner(path)
+}
+
+fn read_git_diff_inner(path: String) -> Result<GitDiff, ApiError> {
     let file = Path::new(&path);
     let file_name = file
         .file_name()
@@ -436,7 +443,15 @@ fn head_bytes(root: &Path, relative: &str) -> Result<Option<Vec<u8>>, ApiError> 
 }
 
 #[tauri::command]
-pub fn read_git_versions(path: String) -> Result<GitVersions, ApiError> {
+pub fn read_git_versions(
+    path: String,
+    scope: State<'_, PathScope>,
+) -> Result<GitVersions, ApiError> {
+    scope.require(Path::new(&path))?;
+    read_git_versions_inner(path)
+}
+
+fn read_git_versions_inner(path: String) -> Result<GitVersions, ApiError> {
     let file = Path::new(&path);
     let file_name = file
         .file_name()
@@ -554,7 +569,7 @@ mod tests {
     }
 
     fn diff_of(path: &Path) -> GitDiff {
-        read_git_diff(path.to_string_lossy().into_owned()).unwrap()
+        read_git_diff_inner(path.to_string_lossy().into_owned()).unwrap()
     }
 
     #[test]
@@ -707,7 +722,7 @@ mod tests {
     }
 
     fn versions_of(path: &Path) -> GitVersions {
-        read_git_versions(path.to_string_lossy().into_owned()).unwrap()
+        read_git_versions_inner(path.to_string_lossy().into_owned()).unwrap()
     }
 
     #[test]
