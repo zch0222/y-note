@@ -236,10 +236,19 @@ pub fn delete_draft(app: AppHandle, path: String) -> Result<(), ApiError> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     use super::*;
 
+    static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
     fn temp_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("y-note-test-{}", unique_suffix()));
+        let counter = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "y-note-test-{}-{}-{counter}",
+            std::process::id(),
+            unique_suffix()
+        ));
         fs::create_dir_all(&dir).unwrap();
         dir
     }
